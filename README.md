@@ -273,4 +273,6 @@ If you are an API consumer, please do your part:
 * fix: sorted groups by added date
 * fix: grouping summarization errors
 * add: teams to match info
+* add: elo element to group response
+* add: awards element(s) to group response
 

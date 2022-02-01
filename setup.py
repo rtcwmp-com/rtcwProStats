@@ -19,8 +19,8 @@ setuptools.setup(
     # packages=setuptools.find_packages(where="rtcwprostats"),
 
     install_requires=[
-        "aws-cdk-lib==2.0.0-rc.10",
-        "constructs>=10.0.0,<11.0.0",
+        "aws-cdk-lib>=2.0.0-rc.10",
+        "constructs>=10.0.0",
     ],
 
     python_requires=">=3.6",
