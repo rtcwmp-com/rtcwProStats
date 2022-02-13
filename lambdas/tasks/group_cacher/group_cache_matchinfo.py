@@ -77,12 +77,16 @@ def build_teams(new_total_stats):
         game +=1
     
     alias_team_str = "TeamA:"
+    team = []
     for guid in teamA:
-        alias_team_str += aliases[guid][0:12] + ","
+        team.append(aliases[guid][0:12])
+    alias_team_str += ",".join(team)
     
+    team = []
     alias_team_str = alias_team_str[0:-1] + ";TeamB:"
     for guid in teamB:
-        alias_team_str += aliases[guid][0:12] + ","
+        team.append(aliases[guid][0:12])
+    alias_team_str += ",".join(team)
         
     return teamA, teamB, aliases, team_mapping, alias_team_str[0:-1]
 

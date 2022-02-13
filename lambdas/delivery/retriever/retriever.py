@@ -1083,7 +1083,7 @@ if __name__ == "__main__":
     event_str_stats_group = '''
     {
       "resource": "/stats/group/{group_name}",
-      "pathParameters":{"group_name":"gather-Wednesday-1637863062"}
+      "pathParameters":{"group_name":"gather-1641540724"}
     }
     '''
     event_str_wstats_group = '''
@@ -1093,5 +1093,5 @@ if __name__ == "__main__":
     }
     '''
  
-    event = json.loads(event_str_eloprogress_match)
+    event = json.loads(event_str_stats_group)
     print(handler(event, None)['body'])

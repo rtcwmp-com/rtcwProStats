@@ -49,6 +49,6 @@ def handler(event, context):
     return {"Final Message" : message}
 
 if __name__ == "__main__":
-    event = 1639371426
-    event = "gather-Wednesday-1637863062"
+    event = 1644787304	
+    # event = "gather-tuesday-1643787819"
     handler(event, None)

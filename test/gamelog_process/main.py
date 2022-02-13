@@ -49,12 +49,14 @@ from longest_kill import LongestKill
 from frontliner import Frontliner
 from megakill import MegaKill
 from top_feuds import TopFeuds
+from view_angles import ViewAngles
 # add your class here
 
 longest_kill = LongestKill()
 frontliner = Frontliner()
 megakill = MegaKill()
 top_feuds = TopFeuds()
+view_angles = ViewAngles()
 # init your class here
 
 # Loop through all events in the match or a group and feed events to different award calculator classes
@@ -63,12 +65,14 @@ for rtcw_event in gamelog:
     frontliner.process_event(rtcw_event)
     megakill.process_event(rtcw_event)
     top_feuds.process_event(rtcw_event)
+    view_angles.process_event(rtcw_event)
     # your_class.process_event(rtcw_event)
 
 awards = {}
 awards.update(longest_kill.get_all_top_results())
 awards.update(frontliner.get_all_top_results())
 awards.update(megakill.get_all_top_results())
+awards.update(view_angles.get_custom_results())
 # insert your result here
 
 print(top_feuds.get_custom_results())

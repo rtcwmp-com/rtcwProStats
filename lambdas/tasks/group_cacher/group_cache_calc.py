@@ -84,7 +84,8 @@ def process_rtcwpro_summary(ddb_table, ddb_client, group_name, log_stream_name):
     
     elos = get_elos(new_total_stats, ddb_table, match_region_type, log_stream_name)
     match_summary = build_new_match_summary(match_dict, team_mapping)
-    stats_standard_response = emulate_stats_api(stats_dict_updated, teamA, teamB, aliases, match_region_type, group_name, match_summary, elos)
+    classes = derive_classes(stats_dict_updated, wstats_dict_updated)
+    stats_standard_response = emulate_stats_api(stats_dict_updated, teamA, teamB, aliases, match_region_type, group_name, match_summary, elos, classes)
     
     group_item = ddb_prepare_group_item(group_response, alias_team_str, match_summary)
     stats_item = ddb_prepare_stat_item("stats", stats_standard_response, match_region_type, group_name)
@@ -111,6 +112,49 @@ def process_rtcwpro_summary(ddb_table, ddb_client, group_name, log_stream_name):
     message += "Group was cached"
     return message
 
+def derive_classes(stats_dict_updated, wstats_dict_updated):
+    """ Figure out player classes based on their weapon usages."""
+    player_class_points = {}
+    player_total_kills = {}
+    for guid, wstats in wstats_dict_updated.items():
+        player_class_points[guid] = {}
+        player_total_kills[guid] = {}
+        for weapon, values in wstats.items():
+            if weapon in ["Panzer","Mauser"]:
+                player_class_points[guid][weapon] = player_class_points.get(guid,{}).get(weapon,0) + values.get("kills",0)
+                player_total_kills[guid][weapon] = player_total_kills.get(weapon,0) + values.get("kills",0)
+            if weapon in ["Airstrike", "Artillery"]:
+                player_class_points[guid]["LT"] = player_class_points.get(guid,{}).get("LT",0) + values.get("shots",0)*3 # 3 points for a smoke
+            if weapon in ["Syringe"]:
+                player_class_points[guid]["Medic"] = player_class_points.get(guid,{}).get("Medic",0) + values.get("shots",0)*3  # 3 points for a poke
+    
+    for guid, stats in stats_dict_updated.items():
+        player_class_points[guid] = player_class_points.get(guid,{}) # for safety
+        player_total_kills[guid] = player_total_kills.get(guid,{}) # for safety
+        player_class_points[guid]["LT"] = player_class_points.get(guid,{}).get("LT",0) + stats.get("ammogiven",0)  # 1 point for a pack
+        player_class_points[guid]["Medic"] = player_class_points.get(guid,{}).get("Medic",0) + stats.get("healthgiven",0)  # 1 point for a schnack
+    
+    classes = {}
+    for guid, values in player_class_points.items():
+        mauser_kills = player_total_kills.get(guid,{}).get("Mauser",1)
+        panzer_kills = player_total_kills.get(guid,{}).get("Panzer",1)
+        mauser_kills = 1 if mauser_kills == 0 else mauser_kills
+        panzer_kills = 1 if panzer_kills == 0 else panzer_kills
+        
+        if values.get("Mauser",0)/mauser_kills > .1:
+            classes[guid] = "Sniper"
+        elif values.get("LT",0) > values.get("Medic",0):
+            classes[guid] = "LT"
+        elif values.get("Medic",0) > values.get("LT",0):
+            classes[guid] = "Medic"
+        else:
+            classes[guid] = "Mixed"
+        
+        # this break is intended to override sniper with panzer
+        if values.get("Panzer",0)/panzer_kills > .2:
+            classes[guid] = "Panzer"
+    return classes
+
 def get_elos(new_total_stats, ddb_table, match_region_type, log_stream_name):
     item_list = []
     item_list.extend(prepare_elo_item_list(new_total_stats, match_region_type))
@@ -130,7 +174,7 @@ def get_elos(new_total_stats, ddb_table, match_region_type, log_stream_name):
         logger.error("group_cache_calc.get_elos failed to get any results back.")
     return elos
 
-def emulate_stats_api(stats_dict_updated, teamA, teamB, aliases, match_region_type, group_name, match_summary, elos):
+def emulate_stats_api(stats_dict_updated, teamA, teamB, aliases, match_region_type, group_name, match_summary, elos, classes):
     """ Convert current wstats summary to json format consistent with raw match data."""
     response = {}
     response["statsall"] = []
@@ -138,6 +182,7 @@ def emulate_stats_api(stats_dict_updated, teamA, teamB, aliases, match_region_ty
     response["type"] = match_region_type
     response["match_summary"] = match_summary
     response["elos"] = elos
+    response["classes"] = classes
     
     for guid, player_stat in stats_dict_updated.items():
         
