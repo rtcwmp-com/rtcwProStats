@@ -1,15 +1,3 @@
-try:
-    from gamelog_process.longest_kill import LongestKill
-    from gamelog_process.frontliner import Frontliner
-    from gamelog_process.megakill import MegaKill
-    from gamelog_process.top_feuds import TopFeuds
-except:
-    print("Debug imports")
-    from longest_kill import LongestKill
-    from frontliner import Frontliner
-    from megakill import MegaKill
-    from top_feuds import TopFeuds
-
 import logging
 from botocore.exceptions import ClientError
 import json
@@ -18,6 +6,13 @@ from boto3.dynamodb.conditions import Key
 import math
 from datetime import datetime
 import time as _time
+
+from gamelog_process.longest_kill import LongestKill
+from gamelog_process.frontliner import Frontliner
+from gamelog_process.megakill import MegaKill
+from gamelog_process.top_feuds import TopFeuds
+from gamelog_process.view_angles import ViewAngles
+from gamelog_process.kills_per_game import KillsPerGame
 
 log_level = logging.INFO
 logging.basicConfig(format='%(name)s:%(levelname)s:%(message)s')
@@ -32,9 +27,11 @@ def process_gamelog(ddb_table, ddb_client, match_or_group_id, log_stream_name):
         LongestKill(),
         Frontliner(),
         MegaKill(),
-        TopFeuds()
+        TopFeuds(),
+        ViewAngles(),
+        KillsPerGame()
         ]
-    achievment_award_names = ["Longest Kill", "MegaKill"]
+    achievment_award_names = ["Longest Kill", "MegaKill", "Kills Per Game"]
     
     is_single_match = isinstance(match_or_group_id, int)
     is_group = not is_single_match
@@ -61,6 +58,8 @@ def process_gamelog(ddb_table, ddb_client, match_or_group_id, log_stream_name):
                     template = "Top Feuds: An exception of type {0} occurred. Arguments:\n{1!r}"
                     error_msg = template.format(type(ex).__name__, ex.args)
                     logger.error(error_msg)
+            elif isinstance(class_, ViewAngles):
+                awards.update(class_.get_custom_results())
             else:   
                 awards.update(class_.get_all_top_results())
 
@@ -140,10 +139,26 @@ def get_multi_round_gamelog_array(ddb_table, match_or_group_id, log_stream_name,
 
 def update_achievements(ddb_table, ddb_client, potential_achievements, log_stream_name, real_names, match_region_type):
     """Update personal achievments for each player."""
-    big_item_list = []
     
+    # stopper retrieving achievements that are too small
+    deletes = {}
     for award, award_table in potential_achievements.items():
-        for guid in award_table:
+        for guid, value in award_table.items():
+            if (award == "Longest Kill" and value < 1500) or \
+               (award == "MegaKill" and value < 3) or \
+               (award == "Kills Per Game" and value < 20):
+                   if award in deletes:
+                       deletes[award].append(guid)
+                   else:
+                       deletes[award] = [guid]
+                       
+    for award, guids in deletes.items():
+        for guid in guids:
+            del potential_achievements[award][guid]
+
+    big_item_list = []
+    for award, award_table in potential_achievements.items():
+        for guid, value in award_table.items():
             big_item_list.append({"pk": "player#" + guid, "sk": "achievement#" + award + "#" + match_region_type})
     
     logger.info("Getting achievements for " + str(len(big_item_list)) + " values.")
