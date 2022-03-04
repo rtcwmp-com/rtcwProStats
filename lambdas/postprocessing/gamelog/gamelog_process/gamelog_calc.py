@@ -32,6 +32,7 @@ def process_gamelog(ddb_table, ddb_client, match_or_group_id, log_stream_name):
         KillsPerGame()
         ]
     achievment_award_names = ["Longest Kill", "MegaKill", "Kills Per Game"]
+    no_group_awards = ["Kills Per Game"]
     
     is_single_match = isinstance(match_or_group_id, int)
     is_group = not is_single_match
@@ -60,6 +61,8 @@ def process_gamelog(ddb_table, ddb_client, match_or_group_id, log_stream_name):
                     logger.error(error_msg)
             elif isinstance(class_, ViewAngles):
                 awards.update(class_.get_custom_results())
+            elif class_.award_name in no_group_awards:
+                continue
             else:   
                 awards.update(class_.get_all_top_results())
 
