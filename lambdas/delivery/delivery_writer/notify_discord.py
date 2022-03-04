@@ -25,5 +25,5 @@ def post_custom_bus_event(event_client, events):
             logger.info("Submitted new event(s)")
         else:
             logger.warning("Bad response from event bridge " + str(response))
-            message += "Failed to announce new players\n."
+            message = "Failed to announce new players\n."
             logger.error(message)
