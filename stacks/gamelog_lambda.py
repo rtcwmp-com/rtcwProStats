@@ -3,6 +3,7 @@ from constructs import Construct
 
 import aws_cdk.aws_iam as iam
 import aws_cdk.aws_lambda as _lambda
+import aws_cdk.aws_events as events
 
 from aws_cdk.aws_dynamodb import Table
 
@@ -13,6 +14,7 @@ class GamelogLambdaStack(Stack):
     def __init__(self, scope: Construct, id: str,
                  lambda_tracing,
                  ddb_table: Table,
+                 custom_event_bus: events.IEventBus,
                  **kwargs) -> None:
         super().__init__(scope, id, **kwargs)
 
@@ -34,7 +36,9 @@ class GamelogLambdaStack(Stack):
             timeout=Duration.seconds(30),
             environment={
                 'RTCWPROSTATS_TABLE_NAME': ddb_table.table_name,
+                'RTCWPROSTATS_CUSTOM_BUS_ARN': custom_event_bus.event_bus_arn
             }
         )
+        custom_event_bus.grant_put_events_to(gamelog_lambda)
 
         self.gamelog_lambda = gamelog_lambda

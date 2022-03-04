@@ -8,12 +8,15 @@ from gamelog_process.gamelog_calc import process_gamelog
 # for lambda execution runtime use dynamic reference
 if __name__ == "__main__":
     TABLE_NAME = "rtcwprostats-database-DDBTable2F2A2F95-1BCIOU7IE3DSE"
+    CUSTOM_BUS = ""
 else:
     TABLE_NAME = os.environ['RTCWPROSTATS_TABLE_NAME']
+    CUSTOM_BUS = os.environ['RTCWPROSTATS_CUSTOM_BUS_ARN']
 
 dynamodb = boto3.resource('dynamodb')
 ddb_table = dynamodb.Table(TABLE_NAME)
 ddb_client = boto3.client('dynamodb')
+event_client = boto3.client('events')
 
 log_level = logging.INFO
 logging.basicConfig(format='%(name)s:%(levelname)s:%(message)s')
@@ -36,7 +39,7 @@ def handler(event, context):
     logger.info("Processing match/group id: " + str(match_or_group_id))
     
     try:
-        process_gamelog(ddb_table, ddb_client, match_or_group_id, log_stream_name)
+        process_gamelog(ddb_table, ddb_client, event_client, match_or_group_id, log_stream_name)
     except Exception as ex:
         template = "An exception of type {0} occurred. Arguments:\n{1!r}"
         error_msg = template.format(type(ex).__name__, ex.args)
@@ -49,6 +52,6 @@ def handler(event, context):
     return {"Final Message" : message}
 
 if __name__ == "__main__":
-    event = 1644787304	
+    event = 1644787304
     # event = "gather-tuesday-1643787819"
     handler(event, None)

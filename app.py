@@ -37,11 +37,23 @@ database = DatabaseStack(app, "rtcwprostats-database", env=env)
 
 storage = StorageStack(app, "rtcwprostats-storage", env=env, lambda_tracing=lambda_tracing)
 
-gamelog_lambda_stack = GamelogLambdaStack(app, "rtcwprostats-gamelog", ddb_table=database.ddb_table, lambda_tracing=lambda_tracing, env=env)
+custom_bus_stack = CustomBusStack(app, "rtcwprostats-custom-bus", lambda_tracing=lambda_tracing, 
+                                  ddb_table=database.ddb_table, 
+                                  env=env)
 
-task_funnel_stack = TaskFunnelStack(app, "rtcwprostats-taskfunnel", lambda_tracing=lambda_tracing, ddb_table=database.ddb_table, gamelog_lambda = gamelog_lambda_stack.gamelog_lambda, env=env)
-custom_bus_stack = CustomBusStack(app, "rtcwprostats-custom-bus", lambda_tracing=lambda_tracing, ddb_table=database.ddb_table, env=env)
-post_process_stack = PostProcessStack(app, "rtcwprostats-postprocess", lambda_tracing=lambda_tracing, ddb_table=database.ddb_table, 
+gamelog_lambda_stack = GamelogLambdaStack(app, "rtcwprostats-gamelog",
+                                          ddb_table=database.ddb_table,
+                                          custom_event_bus=custom_bus_stack.custom_bus,
+                                          lambda_tracing=lambda_tracing, env=env)
+
+task_funnel_stack = TaskFunnelStack(app, "rtcwprostats-taskfunnel", lambda_tracing=lambda_tracing,
+                                    ddb_table=database.ddb_table,
+                                    gamelog_lambda = gamelog_lambda_stack.gamelog_lambda,
+                                    env=env)
+
+post_process_stack = PostProcessStack(app, "rtcwprostats-postprocess", 
+                                      lambda_tracing=lambda_tracing, 
+                                      ddb_table=database.ddb_table, 
                                       gamelog_lambda = gamelog_lambda_stack.gamelog_lambda, 
                                       env=env)
 
@@ -54,14 +66,37 @@ reader = ReadMatchStack(app, "rtcwprostats-reader",
                         custom_event_bus=custom_bus_stack.custom_bus, 
                         lambda_tracing=lambda_tracing, 
                         env=env)
-retriever = DeliveryRetrieverStack(app, "rtcwprostats-retriever", ddb_table=database.ddb_table, env=env, lambda_tracing=lambda_tracing)
-delivery_writer = DeliveryWriterStack(app, "rtcwprostats-delivery-writer", ddb_table=database.ddb_table, funnel_sf=task_funnel_stack.funnel_state_machine, custom_event_bus=custom_bus_stack.custom_bus, env=env, lambda_tracing=lambda_tracing)
 
-apistack = APIStack(app, "rtcwprostats-API", cert_arn=cert_arn, api_key=api_key, storage_bucket=storage.storage_bucket, env=env, lambda_tracing=lambda_tracing)
-DNSStack(app, "rtcwprostats-DNS", api=apistack.api, env=env, dns_resource_name=dns_resource_name, hosted_zone_id=hosted_zone_id, zone_name=zone_name)
+retriever = DeliveryRetrieverStack(app, "rtcwprostats-retriever", 
+                                   ddb_table=database.ddb_table, 
+                                   env=env, lambda_tracing=lambda_tracing)
+
+delivery_writer = DeliveryWriterStack(app, "rtcwprostats-delivery-writer",
+                                      ddb_table=database.ddb_table,
+                                      funnel_sf=task_funnel_stack.funnel_state_machine,
+                                      custom_event_bus=custom_bus_stack.custom_bus,
+                                      env=env, lambda_tracing=lambda_tracing)
+
+apistack = APIStack(app, "rtcwprostats-API", 
+                    cert_arn=cert_arn,
+                    api_key=api_key,
+                    storage_bucket=storage.storage_bucket,
+                    env=env, lambda_tracing=lambda_tracing)
+
+DNSStack(app, "rtcwprostats-DNS", 
+         api=apistack.api, 
+         env=env, 
+         dns_resource_name=dns_resource_name, 
+         hosted_zone_id=hosted_zone_id, 
+         zone_name=zone_name)
 
 ProcessingStack(app, "rtcwprostats-processing", env=env, lambda_tracing=lambda_tracing)
-DeliveryStack(app, "rtcwprostats-delivery", api=apistack.api, retriever=retriever.retriever_lambda, delivery_writer=delivery_writer.delivery_writer_lambda, env=env)
+
+DeliveryStack(app, "rtcwprostats-delivery", 
+              api=apistack.api,
+              retriever=retriever.retriever_lambda,
+              delivery_writer=delivery_writer.delivery_writer_lambda,
+              env=env)
 
 
 cdk.Tags.of(app).add("purpose", "rtcwpro")

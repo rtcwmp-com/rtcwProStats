@@ -13,6 +13,7 @@ from gamelog_process.megakill import MegaKill
 from gamelog_process.top_feuds import TopFeuds
 from gamelog_process.view_angles import ViewAngles
 from gamelog_process.kills_per_game import KillsPerGame
+from gamelog_process.notify_discord import post_custom_bus_event
 
 log_level = logging.INFO
 logging.basicConfig(format='%(name)s:%(levelname)s:%(message)s')
@@ -20,7 +21,7 @@ logger = logging.getLogger("gamelog_calc")
 logger.setLevel(log_level)
 
 
-def process_gamelog(ddb_table, ddb_client, match_or_group_id, log_stream_name):
+def process_gamelog(ddb_table, ddb_client, event_client, match_or_group_id, log_stream_name):
     """Main logic for processing a collection of gamelogs."""
     # Put individual award calculator classes into an array 
     award_classes = [
@@ -71,7 +72,7 @@ def process_gamelog(ddb_table, ddb_client, match_or_group_id, log_stream_name):
     if is_single_match:
         logger.info("Updating achievements for a single match.")
         real_names = get_real_names(potential_achievements, [],  ddb_table)
-        update_achievements(ddb_table, ddb_client, potential_achievements, log_stream_name, real_names, match_region_type)
+        update_achievements(ddb_table, ddb_client, event_client, potential_achievements, log_stream_name, real_names, match_region_type)
     
     if is_group:
         logger.info("Saving cache for a group of matches.")
@@ -140,7 +141,7 @@ def get_multi_round_gamelog_array(ddb_table, match_or_group_id, log_stream_name,
     return gamelog_all, match_region_type
 
 
-def update_achievements(ddb_table, ddb_client, potential_achievements, log_stream_name, real_names, match_region_type):
+def update_achievements(ddb_table, ddb_client, event_client, potential_achievements, log_stream_name, real_names, match_region_type):
     """Update personal achievments for each player."""
     
     # stopper retrieving achievements that are too small
@@ -183,16 +184,41 @@ def update_achievements(ddb_table, ddb_client, potential_achievements, log_strea
     if len(items) > 0:
         try:
             ddb_batch_write(ddb_client, ddb_table.name, items)
+
+            events = announce_new_achievements(update_achievement_items, match_region_type)
+            post_custom_bus_event(event_client, events)
         except Exception as ex:
             template = "gamelog_calc.ddb_batch_write: An exception of type {0} occurred. Arguments:\n{1!r}"
             error_msg = template.format(type(ex).__name__, ex.args)
-            message = "Failed to insert achievements for a match.\n" + error_msg
+            message = "Failed to insert/announce achievements for a match.\n" + error_msg
         else:
             message = "Achievements records inserted."
     else:
         message = "No achievements to insert this time."
     logger.info(message)
-    
+
+def announce_new_achievements(update_achievement_items, match_region_type):
+    """Prepare an event about new group for discord announcement."""
+    events = []
+
+    event_template = {
+        'Source': 'rtcwpro-pipeline',
+        'DetailType': 'Discord notification',
+        'Detail': '',
+        'EventBusName': CUSTOM_BUS
+    }
+
+    achievements = {}
+    for achievement in update_achievement_items:
+        achievements_key = achievement['real_name'] + "#" + achievement['sk'].split("#")[1]
+        achievements_value = int(achievement['gsi1sk'])
+        achievements[achievements_key] = achievements_value
+    tmp_event = event_template.copy()
+    tmp_event["Detail"] = json.dumps({"notification_type": "new achievements",
+                                      "achievements": achievements,
+                                      "match_type": match_region_type})
+    events.append(tmp_event)
+    return events
     
 def make_error_dict(message, item_info):
     """Make an error message for API gateway."""
@@ -248,7 +274,7 @@ def ddb_prepare_achievement_items(potential_achievements, achievments_old, real_
         for guid, player_value in achievement_table.items():
             if int(player_value) > int(achievments_old.get(guid + "#" + achievement,0)):
                 item = {
-                    'pk'            : "player"+ "#" + guid,
+                    'pk'            : "player" + "#" + guid,
                     'sk'            : "achievement#" + achievement + "#" + match_region_type,
                     'lsipk'         : "achievement#" + ts,
                     'gsi1pk'        : "leader#" + achievement + "#" + match_region_type,

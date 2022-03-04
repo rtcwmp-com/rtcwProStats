@@ -44,7 +44,7 @@ def get_hook_url(event):
         match_type = event['detail']['match_type']
 
     sk = ""
-    if event['detail']['notification_type'] in ['new player', 'new server', "new group"]:
+    if event['detail']['notification_type'] in ['new player', 'new server', "new group", "new achievements"]:
         sk = match_type + "#default"
 
     try:
@@ -70,11 +70,46 @@ def build_discord_message(event):
         payload = build_server_payload(event)
     if event["detail"]["notification_type"] == "new group":
         payload = build_new_group_payload(event)
+    if event["detail"]["notification_type"] == "new achievements":
+        payload = build_new_achievements_payload(event)
 
     if not payload:
         raise ValueError("No content was created.")
     return payload
 
+def build_new_achievements_payload(event):
+    """Create a message about a new server."""
+    achievements = event["detail"]["achievements"]
+    
+    colwith_1 = 15
+    colwith_2 = 20
+    colwith_3 = 6
+    
+    headers = ""
+    headers += "Name".ljust(colwith_1)
+    headers += "Achievement".ljust(colwith_2)
+    headers += "Value".ljust(colwith_3)
+
+    content = headers + "\n"
+    for key, value in achievements.items():
+        row = ""
+        row += key.split("#")[0][0:15].ljust(colwith_1)
+        row += key.split("#")[1][0:20].ljust(colwith_2)
+        row += str(value).ljust(colwith_3)
+        content += row + "\n"
+
+    payload = {
+        "embeds": [
+            {
+                "author": {
+                    "name": "RTCWProAPI",
+                    "icon_url": "https://rtcwpro.com/images/RtCWProVector.png"
+                },
+                "description": "The following players received new achievements! `\n" + content + "`",
+                "color": 15258703
+            }]
+    }
+    return payload
 
 def build_new_user_payload(event):
     """Create a message about a new user."""
@@ -163,5 +198,14 @@ if __name__ == "__main__":
                                   "match_type": "test#6"
                                   }
                        }
-    event = event_new_group
+    
+    event_new_achievements = {'source': 'rtcwpro-pipeline',
+                              'detail-type': 'Discord notification',
+                              'detail': {"notification_type": "new achievements", 
+                                         "achievements": {"ryder#Longest Kill": 2004, 
+                                                          "consecro#MegaKill": 3}, 
+                                         "match_type": "test#6"
+                                         },
+                              }
+    event = event_new_achievements
     handler(event, None)
