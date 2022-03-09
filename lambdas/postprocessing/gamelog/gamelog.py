@@ -39,7 +39,7 @@ def handler(event, context):
     logger.info("Processing match/group id: " + str(match_or_group_id))
     
     try:
-        process_gamelog(ddb_table, ddb_client, event_client, match_or_group_id, log_stream_name)
+        process_gamelog(ddb_table, ddb_client, event_client, match_or_group_id, log_stream_name, CUSTOM_BUS)
     except Exception as ex:
         template = "An exception of type {0} occurred. Arguments:\n{1!r}"
         error_msg = template.format(type(ex).__name__, ex.args)
@@ -53,5 +53,5 @@ def handler(event, context):
 
 if __name__ == "__main__":
     event = 1644787304
-    # event = "gather-tuesday-1643787819"
+    event = "gather-53entries-1646837074"
     handler(event, None)

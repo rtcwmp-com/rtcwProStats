@@ -37,6 +37,6 @@ def handler(event, context):
 if __name__ == "__main__":
     event = {
         "tasktype": "group_cacher",
-        "taskdetail": "gather-1646365616"
+        "taskdetail": "gather-53entries-1646837074"
     }
     handler(event, None)

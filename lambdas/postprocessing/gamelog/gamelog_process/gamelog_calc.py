@@ -21,7 +21,7 @@ logger = logging.getLogger("gamelog_calc")
 logger.setLevel(log_level)
 
 
-def process_gamelog(ddb_table, ddb_client, event_client, match_or_group_id, log_stream_name):
+def process_gamelog(ddb_table, ddb_client, event_client, match_or_group_id, log_stream_name, CUSTOM_BUS):
     """Main logic for processing a collection of gamelogs."""
     # Put individual award calculator classes into an array 
     award_classes = [
@@ -72,7 +72,7 @@ def process_gamelog(ddb_table, ddb_client, event_client, match_or_group_id, log_
     if is_single_match:
         logger.info("Updating achievements for a single match.")
         real_names = get_real_names(potential_achievements, [],  ddb_table)
-        update_achievements(ddb_table, ddb_client, event_client, potential_achievements, log_stream_name, real_names, match_region_type)
+        update_achievements(ddb_table, ddb_client, event_client, potential_achievements, log_stream_name, real_names, match_region_type, CUSTOM_BUS)
     
     if is_group:
         logger.info("Saving cache for a group of matches.")
@@ -141,7 +141,7 @@ def get_multi_round_gamelog_array(ddb_table, match_or_group_id, log_stream_name,
     return gamelog_all, match_region_type
 
 
-def update_achievements(ddb_table, ddb_client, event_client, potential_achievements, log_stream_name, real_names, match_region_type):
+def update_achievements(ddb_table, ddb_client, event_client, potential_achievements, log_stream_name, real_names, match_region_type, CUSTOM_BUS):
     """Update personal achievments for each player."""
     
     # stopper retrieving achievements that are too small
@@ -185,7 +185,7 @@ def update_achievements(ddb_table, ddb_client, event_client, potential_achieveme
         try:
             ddb_batch_write(ddb_client, ddb_table.name, items)
 
-            events = announce_new_achievements(update_achievement_items, match_region_type)
+            events = announce_new_achievements(update_achievement_items, match_region_type, CUSTOM_BUS)
             post_custom_bus_event(event_client, events)
         except Exception as ex:
             template = "gamelog_calc.ddb_batch_write: An exception of type {0} occurred. Arguments:\n{1!r}"
@@ -197,7 +197,7 @@ def update_achievements(ddb_table, ddb_client, event_client, potential_achieveme
         message = "No achievements to insert this time."
     logger.info(message)
 
-def announce_new_achievements(update_achievement_items, match_region_type):
+def announce_new_achievements(update_achievement_items, match_region_type, CUSTOM_BUS):
     """Prepare an event about new group for discord announcement."""
     events = []
 

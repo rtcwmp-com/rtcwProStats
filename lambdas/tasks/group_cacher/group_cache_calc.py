@@ -4,6 +4,7 @@ import json
 import boto3
 import time as _time
 from boto3.dynamodb.conditions import Key
+import math
 
 from group_cache_matchinfo import build_teams, build_new_match_summary, convert_stats_to_dict
 
@@ -21,13 +22,14 @@ def process_rtcwpro_summary(ddb_table, ddb_client, group_name, log_stream_name):
     if len(group_response.get("Items",[])) > 0:
         matches = json.loads(group_response["Items"][0]["data"])
     
-    item_list = []
-    item_list.extend(prepare_stats_item_list(matches,"statsall"))
-    item_list.extend(prepare_stats_item_list(matches,"wstatsall"))
-    item_list.extend(prepare_matches_item_list(matches))
+    big_item_list = []
+    big_item_list.extend(prepare_stats_item_list(matches,"statsall"))
+    big_item_list.extend(prepare_stats_item_list(matches,"wstatsall"))
+    big_item_list.extend(prepare_matches_item_list(matches))
     
-    logger.info("Getting basics stats, wstats, matches for number of items: " + str(len(item_list)))
-    responses = get_batch_items(item_list, ddb_table, log_stream_name)
+    logger.info("Getting basics stats, wstats, matches for number of items: " + str(len(big_item_list)))
+    responses = get_big_batch_items(big_item_list, ddb_table, log_stream_name)
+    # responses = get_batch_items(item_list, ddb_table, log_stream_name)
 
     match_dict= {}
     stats_dict = {}
@@ -111,6 +113,30 @@ def process_rtcwpro_summary(ddb_table, ddb_client, group_name, log_stream_name):
     logger.info(f"Time to process summaries is {time_to_write} s")
     message += "Group was cached"
     return message
+
+def get_big_batch_items(big_item_list, ddb_table, log_stream_name):
+    """Get over 100 batch items."""
+    
+    num_items = len(big_item_list)
+    
+    start = 0
+    batch_size = 100
+    
+    batches = math.ceil(num_items/batch_size) 
+    logger.info(f'Performing get_batch_items from dynamo with {num_items} items in {batches} batches.')
+    
+    item_list_list = []
+    for i in range(1, batches+1):
+        item_list_list.append(big_item_list[start: start + batch_size])
+        start += batch_size
+    
+    big_response = []
+    for item_list in item_list_list:
+        response = get_batch_items(item_list, ddb_table, log_stream_name)
+        if "error" not in response:
+            big_response.extend(response)
+    
+    return big_response
 
 def derive_classes(stats_dict_updated, wstats_dict_updated):
     """ Figure out player classes based on their weapon usages."""
@@ -235,7 +261,12 @@ def build_new_stats_summary(stats, stats_old):
         
         if stats_dict_new[guid]["kills"] + stats_dict_new[guid]["deaths"] == 0:
             efficiency = 100*stats_dict_new[guid]["kills"]/1
-        efficiency = 100*stats_dict_new[guid]["kills"]/(stats_dict_new[guid]["kills"] + stats_dict_new[guid]["deaths"])                
+        
+        kills_plus_deaths = stats_dict_new[guid]["kills"] + stats_dict_new[guid]["deaths"]
+        if kills_plus_deaths == 0:
+            kills_plus_deaths = 1
+        
+        efficiency = 100*stats_dict_new[guid]["kills"]/kills_plus_deaths             
         stats_dict_new[guid]["efficiency"] = int(efficiency)
         stats_dict_new[guid]["killpeak"] = max(stats_dict_new[guid].get("killpeak",0),metrics.get("killpeak",0))
     
