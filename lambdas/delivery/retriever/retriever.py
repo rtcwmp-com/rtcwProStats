@@ -408,7 +408,7 @@ def handler(event, context):
         player_guid = event["pathParameters"]["player_guid"]
         region = event["pathParameters"]["region"]
         type_ = event["pathParameters"]["type"]
-        limit = 40
+        limit = 100
         
         logger.info("Parameters: " + player_guid + " " + region + " " + type_)
         
