@@ -10,9 +10,9 @@ from notify_discord import post_custom_bus_event
 
 if __name__ == "__main__":
     TABLE_NAME = "rtcwprostats-database-DDBTable2F2A2F95-1BCIOU7IE3DSE"
-    MATCH_STATE_MACHINE = ""  # set this at debug time
     print("\n\n\nSet state machine and custom bus values in console\n\n\n")
-    CUSTOM_BUS = ""
+    # CUSTOM_BUS = ""
+    # MATCH_STATE_MACHINE = ""  # set this at debug time
 else:
     TABLE_NAME = os.environ['RTCWPROSTATS_TABLE_NAME']
     MATCH_STATE_MACHINE = os.environ['RTCWPROSTATS_FUNNEL_STATE_MACHINE']

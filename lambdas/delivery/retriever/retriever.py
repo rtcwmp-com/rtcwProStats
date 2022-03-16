@@ -1083,7 +1083,7 @@ if __name__ == "__main__":
     event_str_stats_group = '''
     {
       "resource": "/stats/group/{group_name}",
-      "pathParameters":{"group_name":"gather-1641540724"}
+      "pathParameters":{"group_name":"monthly-2022February"}
     }
     '''
     event_str_wstats_group = '''

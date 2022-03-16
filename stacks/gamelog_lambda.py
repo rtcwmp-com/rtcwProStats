@@ -33,7 +33,7 @@ class GamelogLambdaStack(Stack):
             runtime=_lambda.Runtime.PYTHON_3_8,
             role=ddb_lambda_role,
             tracing=lambda_tracing,
-            timeout=Duration.seconds(30),
+            timeout=Duration.seconds(90),
             environment={
                 'RTCWPROSTATS_TABLE_NAME': ddb_table.table_name,
                 'RTCWPROSTATS_CUSTOM_BUS_ARN': custom_event_bus.event_bus_arn

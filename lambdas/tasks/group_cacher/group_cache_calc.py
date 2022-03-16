@@ -182,11 +182,12 @@ def derive_classes(stats_dict_updated, wstats_dict_updated):
     return classes
 
 def get_elos(new_total_stats, ddb_table, match_region_type, log_stream_name):
-    item_list = []
-    item_list.extend(prepare_elo_item_list(new_total_stats, match_region_type))
+    big_item_list = []
+    big_item_list.extend(prepare_elo_item_list(new_total_stats, match_region_type))
     
-    logger.info("Getting elos for number of items: " + str(len(item_list)))
-    responses = get_batch_items(item_list, ddb_table, log_stream_name)
+    logger.info("Getting elos for number of items: " + str(len(big_item_list)))
+    # responses = get_batch_items(item_list, ddb_table, log_stream_name)
+    responses = get_big_batch_items(big_item_list, ddb_table, log_stream_name)
     
     elos = {}
     if "error" not in responses and len(responses) > 0:

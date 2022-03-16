@@ -6,7 +6,7 @@ import aws_cdk.aws_lambda as _lambda
 from stacks.api import APIStack
 from stacks.storage import StorageStack
 from stacks.dns import DNSStack
-from stacks.processing import ProcessingStack
+from stacks.periodical import PeriodicalStack
 from stacks.database import DatabaseStack
 from stacks.delivery_retriever import DeliveryRetrieverStack
 from stacks.delivery_writer import DeliveryWriterStack
@@ -90,7 +90,11 @@ DNSStack(app, "rtcwprostats-DNS",
          hosted_zone_id=hosted_zone_id, 
          zone_name=zone_name)
 
-ProcessingStack(app, "rtcwprostats-processing", env=env, lambda_tracing=lambda_tracing)
+PeriodicalStack(app, "rtcwprostats-periodical", 
+                ddb_table=database.ddb_table,
+                funnel_sf=task_funnel_stack.funnel_state_machine,
+                custom_event_bus=custom_bus_stack.custom_bus,
+                env=env, lambda_tracing=lambda_tracing)
 
 DeliveryStack(app, "rtcwprostats-delivery", 
               api=apistack.api,

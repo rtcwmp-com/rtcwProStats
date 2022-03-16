@@ -53,5 +53,5 @@ def handler(event, context):
 
 if __name__ == "__main__":
     event = 1644787304
-    event = "gather-53entries-1646837074"
+    event = "monthly-eu-6-2022February"
     handler(event, None)

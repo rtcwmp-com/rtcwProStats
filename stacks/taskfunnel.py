@@ -33,7 +33,7 @@ class TaskFunnelStack(Stack):
             runtime=_lambda.Runtime.PYTHON_3_8,
             role=funnel_lambda_role,
             tracing=lambda_tracing,
-            timeout=Duration.seconds(30),
+            timeout=Duration.seconds(90),
             environment={
                 'RTCWPROSTATS_TABLE_NAME': ddb_table.table_name,
             }
