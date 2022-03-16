@@ -34,8 +34,11 @@ def get_groups(ddb_table, region, type_, num_rows):
                                ScanIndexForward=False)
 
     group_items = []
+    group_item_dups = []
     for record in response["Items"]:
-        group_items.append({"pk": "groupcache#stats", "sk": record["sk"].split("#")[0]})
+        if record["sk"].split("#")[0] not in group_item_dups:
+            group_items.append({"pk": "groupcache#stats", "sk": record["sk"].split("#")[0]})
+            group_item_dups.append(record["sk"].split("#")[0])
 
     num_items = len(group_items)
     start = 0
