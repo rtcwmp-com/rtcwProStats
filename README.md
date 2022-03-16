@@ -275,4 +275,8 @@ If you are an API consumer, please do your part:
 * add: teams to match info
 * add: elo element to group response
 * add: awards element(s) to group response
+* add: various awards calculated from gamelog json element of a match
+* add: discord notifications about individual achievements
+* fix: ability to group more than 25 matches
+* add: monthly automatic groups with a month worth of activity
 
