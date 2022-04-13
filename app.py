@@ -54,7 +54,8 @@ task_funnel_stack = TaskFunnelStack(app, "rtcwprostats-taskfunnel", lambda_traci
 post_process_stack = PostProcessStack(app, "rtcwprostats-postprocess", 
                                       lambda_tracing=lambda_tracing, 
                                       ddb_table=database.ddb_table, 
-                                      gamelog_lambda = gamelog_lambda_stack.gamelog_lambda, 
+                                      gamelog_lambda = gamelog_lambda_stack.gamelog_lambda,
+                                      custom_event_bus=custom_bus_stack.custom_bus,
                                       env=env)
 
 reader = ReadMatchStack(app, "rtcwprostats-reader", 

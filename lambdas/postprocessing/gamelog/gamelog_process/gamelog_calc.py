@@ -72,7 +72,8 @@ def process_gamelog(ddb_table, ddb_client, event_client, match_or_group_id, log_
     if is_single_match:
         logger.info("Updating achievements for a single match.")
         real_names = get_real_names(potential_achievements, [],  ddb_table)
-        update_achievements(ddb_table, ddb_client, event_client, potential_achievements, log_stream_name, real_names, match_region_type, CUSTOM_BUS)
+        match_id = match_or_group_id
+        update_achievements(ddb_table, ddb_client, event_client, potential_achievements, log_stream_name, real_names, match_region_type, CUSTOM_BUS, match_id)
     
     if is_group:
         logger.info("Saving cache for a group of matches.")
@@ -141,10 +142,10 @@ def get_multi_round_gamelog_array(ddb_table, match_or_group_id, log_stream_name,
     return gamelog_all, match_region_type
 
 
-def update_achievements(ddb_table, ddb_client, event_client, potential_achievements, log_stream_name, real_names, match_region_type, CUSTOM_BUS):
+def update_achievements(ddb_table, ddb_client, event_client, potential_achievements, log_stream_name, real_names, match_region_type, CUSTOM_BUS, match_id):
     """Update personal achievments for each player."""
     
-    # stopper retrieving achievements that are too small
+    # stopped retrieving achievements that are too small
     deletes = {}
     for award, award_table in potential_achievements.items():
         for guid, value in award_table.items():
@@ -175,7 +176,7 @@ def update_achievements(ddb_table, ddb_client, event_client, potential_achieveme
         achievement_code = achievement_item["sk"].split("#")[1]
         achievments_old[guid + "#" + achievement_code] = float(achievement_item["gsi1sk"])
     
-    update_achievement_items = ddb_prepare_achievement_items(potential_achievements, achievments_old, real_names, match_region_type)
+    update_achievement_items = ddb_prepare_achievement_items(potential_achievements, achievments_old, real_names, match_region_type, match_id)
     
     # submit updated summaries
     items = []
@@ -267,7 +268,7 @@ def get_big_batch_items(big_item_list, ddb_table, log_stream_name):
     return big_response
 
 
-def ddb_prepare_achievement_items(potential_achievements, achievments_old, real_names, match_region_type):
+def ddb_prepare_achievement_items(potential_achievements, achievments_old, real_names, match_region_type, match_id):
     items = []
     ts = datetime.now().isoformat()
     for achievement, achievement_table in potential_achievements.items():
@@ -279,7 +280,8 @@ def ddb_prepare_achievement_items(potential_achievements, achievments_old, real_
                     'lsipk'         : "achievement#" + ts,
                     'gsi1pk'        : "leader#" + achievement + "#" + match_region_type,
                     'gsi1sk'        : str(player_value).zfill(6),
-                    "real_name"     : real_names.get(guid, "no_name#")
+                    "real_name"     : real_names.get(guid, "no_name#"),
+                    "match_id"      : match_id
                 }
                 items.append(item)
     return items

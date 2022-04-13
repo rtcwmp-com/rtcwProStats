@@ -9,10 +9,12 @@ if __name__ == "__main__":
     TABLE_NAME = "rtcwprostats-database-DDBTable2F2A2F95-1BCIOU7IE3DSE"
 else:
     TABLE_NAME = os.environ['RTCWPROSTATS_TABLE_NAME']
+    CUSTOM_BUS = os.environ['RTCWPROSTATS_CUSTOM_BUS_ARN']
     
 dynamodb = boto3.resource('dynamodb')
 ddb_table = dynamodb.Table(TABLE_NAME)
 ddb_client = boto3.client('dynamodb')
+event_client = boto3.client('events')
 
 log_level = logging.INFO
 logging.basicConfig(format='%(name)s:%(levelname)s:%(message)s')
@@ -35,11 +37,11 @@ def handler(event, context):
 
     logger.info("Processing match id " + match_id)
     
-    message = process_rtcwpro_summary(ddb_table, ddb_client, match_id, log_stream_name)
+    message = process_rtcwpro_summary(ddb_table, ddb_client, event_client, match_id, log_stream_name, CUSTOM_BUS)
 
     return {"Final Message" : message}
 
 
 if __name__ == "__main__":
-    event = 1631762863
+    event = 1649731485
     handler(event, None)

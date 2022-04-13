@@ -3,13 +3,17 @@ from botocore.exceptions import ClientError
 import json
 import boto3
 import time as _time
+from datetime import datetime
+
+from summary_achievements import Achievements
+from notify_discord import post_custom_bus_event
 
 log_level = logging.INFO
 logging.basicConfig(format='%(name)s:%(levelname)s:%(message)s')
 logger = logging.getLogger("summary_calc")
 logger.setLevel(log_level)
   
-def process_rtcwpro_summary(ddb_table, ddb_client, match_id, log_stream_name):
+def process_rtcwpro_summary(ddb_table, ddb_client, event_client, match_id, log_stream_name, CUSTOM_BUS):
     "RTCWPro pipeline specific logic."
     t1 = _time.time()
     sk = match_id
@@ -47,15 +51,12 @@ def process_rtcwpro_summary(ddb_table, ddb_client, match_id, log_stream_name):
     aggwstats_item_list = prepare_playerinfo_list(stats, "aggwstats#" + match_region_type)
     item_list.extend(aggwstats_item_list)
     
-    killpeak_item_list = prepare_playerinfo_list(stats, "achievement#Killpeak#" + match_region_type)
-    item_list.extend(killpeak_item_list)
-    
     response = get_batch_items(item_list, ddb_table, log_stream_name)
     
     stats_old = {}
     real_names = {}
     wstats_old = {}
-    killpeak_old = {}
+
     if "error" not in response:
         for result in response:
             guid = result["pk"].split("#")[1]
@@ -67,8 +68,6 @@ def process_rtcwpro_summary(ddb_table, ddb_client, match_id, log_stream_name):
                     real_names[guid] = result["data"]
                 if "aggwstats" in result["sk"]:
                     wstats_old[guid] = result["data"]
-                if "achievement#Killpeak#" in result["sk"]:
-                    killpeak_old[guid] = result["data"]
     else:
         if "Items do not exist" in response["error"]:
             logger.warning("Starting fresh.")
@@ -99,30 +98,94 @@ def process_rtcwpro_summary(ddb_table, ddb_client, match_id, log_stream_name):
     wstats = new_wstats
     wstats_dict_updated = build_new_wstats_summary(wstats, wstats_old)
     wstats_items = ddb_prepare_statswstats_items("wstats", wstats_dict_updated, match_region_type, real_names, games_dict)
+
+    try:
+        achievements_class = Achievements(stats)
+        potential_achievements = achievements_class.potential_achievements
+    except Exception as ex:
+        template = "An exception of type {0} occurred. Arguments:\n{1!r}"
+        error_msg = template.format(type(ex).__name__, ex.args)
+        message = "Failed to process summary achievements for a match " + match_id + "\n" + error_msg
+        logger.info(message)
     
-    # build updated killpeaks
-    killpeak_items = ddb_prepare_killpeak_items(stats, killpeak_old, match_region_type, real_names)
+    potential_achievements_item_list = prepare_old_achievements_list(potential_achievements, match_region_type)
+    item_list = []
+    item_list.extend(potential_achievements_item_list)
+    achievments_old_response = get_batch_items(item_list, ddb_table, log_stream_name)
+    
+    achievements_old = {}
+    if "error" in achievments_old_response:
+        if "Items do not exist" not in achievments_old_response["error"]:
+             message = "Failed to retrieve old achievements for " + match_id
+             logger.error(message)   
+        # else ok
+    else:
+        for achievement_item in achievments_old_response:
+            guid = achievement_item["pk"].split("#")[1]
+            achievement_code = achievement_item["sk"].split("#")[1]
+            achievements_old[guid + "#" + achievement_code] = float(achievement_item["gsi1sk"])
+    
+    achievement_items = ddb_prepare_achievement_items(potential_achievements, achievements_old, real_names, match_region_type, match_id)
 
     # submit updated summaries
     items = []
     items.extend(stats_items)
     items.extend(wstats_items)
-    items.extend(killpeak_items)
-    
+    items.extend(achievement_items)
+
     try:
         ddb_batch_write(ddb_client, ddb_table.name, items)
     except Exception as ex:
         template = "An exception of type {0} occurred. Arguments:\n{1!r}"
         error_msg = template.format(type(ex).__name__, ex.args)
         message = "Failed to load aggregate stats for a match " + match_id + "\n" + error_msg
-        logger.info(message)
+        logger.error(message)
     else:
         message = "Elo progress records inserted.\n"
+    
+    
     
     time_to_write = str(round((_time.time() - t1), 3))
     logger.info(f"Time to process summaries is {time_to_write} s")
     message += "Records were summarized"
+    
+    if len(achievement_items) > 0:
+        try:
+            events = announce_new_achievements(achievement_items, match_region_type, CUSTOM_BUS)
+            post_custom_bus_event(event_client, events)
+        except Exception as ex:
+            template = "gamelog_calc.ddb_batch_write: An exception of type {0} occurred. Arguments:\n{1!r}"
+            error_msg = template.format(type(ex).__name__, ex.args)
+            message = "Failed to insert/announce achievements for a match.\n" + error_msg
+        else:
+            message = "Achievements records inserted."
+    else:
+        message = "No achievements to insert this time."
+    
     return message
+
+def announce_new_achievements(achievement_items, match_region_type, CUSTOM_BUS):
+    """Prepare an event about new group for discord announcement."""
+    events = []
+
+    event_template = {
+        'Source': 'rtcwpro-pipeline',
+        'DetailType': 'Discord notification',
+        'Detail': '',
+        'EventBusName': CUSTOM_BUS
+    }
+
+    achievements = {}
+    for achievement in achievement_items:
+        achievements_key = achievement['real_name'] + "#" + achievement['sk'].split("#")[1]
+        achievements_value = int(achievement['gsi1sk'])
+        achievements[achievements_key] = achievements_value
+    tmp_event = event_template.copy()
+    tmp_event["Detail"] = json.dumps({"notification_type": "new achievements",
+                                      "achievements": achievements,
+                                      "match_type": match_region_type})
+    events.append(tmp_event)
+    return events
 
 def convert_stats_to_dict(stats):
     if len(stats) == 2 and len(stats[0]) > 1: #stats grouped in teams in a list of 2 teams , each team over 1 player
@@ -170,13 +233,11 @@ def build_new_wstats_summary(wstats, wstats_old):
     for guid, wstat in wstats.items():
         wstats_dict_updated[guid] = {}
         for weapon, metrics in wstat.items():
-            # print(weapon,weapon_info)
             wstats_dict_updated[guid][weapon] = {}
 
             for metric in metrics:
                 if metric == "weapon":
                     continue
-                #print(metric, metrics[metric])
                 if guid not in wstats_old:
                     wstats_dict_updated[guid][weapon][metric] = int(metrics[metric])
                     continue
@@ -231,13 +292,22 @@ def prepare_playerinfo_list(stats, sk):
         item_list.append({"pk": "player#" + guid, "sk": sk})
     return item_list
 
+def prepare_old_achievements_list(potential_achievements, match_region_type):
+    """Make a list of achievements to retrieve from ddb."""
+    """Make a list of guids to retrieve from ddb."""
+    item_list = []
+    for achievement, achievement_items in potential_achievements.items():
+        for guid, value in achievement_items.items():
+            item_list.append({"pk": "player#" + guid, "sk": "achievement#" + achievement + "#" + match_region_type,})
+    return item_list
+
 
 def get_batch_items(item_list, ddb_table, log_stream_name):
     """Get items in a batch."""
     dynamodb = boto3.resource('dynamodb')
     item_info = "get_batch_items. Logstream: " + log_stream_name
     try:
-        response = dynamodb.batch_get_item(RequestItems={ddb_table.name: {'Keys': item_list, 'ProjectionExpression': 'pk, sk, #data_value', 'ExpressionAttributeNames': {'#data_value': 'data'}}})
+        response = dynamodb.batch_get_item(RequestItems={ddb_table.name: {'Keys': item_list, 'ProjectionExpression': 'pk, sk, #data_value, gsi1sk', 'ExpressionAttributeNames': {'#data_value': 'data'}}})
     except ClientError as e:
         logger.warning("Exception occurred: " + e.response['Error']['Message'])
         result = make_error_dict("[x] Client error calling database: ", item_info)
@@ -314,25 +384,23 @@ def ddb_prepare_stat_item(stat_type, guid, match_region_type, player_stat, real_
         }
     return item
 
-def ddb_prepare_killpeak_items(stats, killpeak_old, match_region_type, real_names):
+def ddb_prepare_achievement_items(potential_achievements, achievements_old, real_names, match_region_type, match_id):
+    """Figure out which potential achievements will make the cut and cast them to dynamodb format."""
     items = []
-    for guid, player_stat in stats.items():
-        if int(player_stat.get("categories", {}).get("killpeak",0)) > int(killpeak_old.get(guid,0)):
-            item = {
-                'pk'            : "player"+ "#" + guid,
-                'sk'            : "achievement#Killpeak#" + match_region_type,
-                # 'lsipk'         : "",
-                'gsi1pk'        : "leader#Killpeak#" + match_region_type,
-                'gsi1sk'        : str(player_stat["categories"]["killpeak"]).zfill(3),
-                'data'          : str(player_stat["categories"]["killpeak"]),
-                'games'         : -1,
-                "real_name"     : real_names.get(guid, "no_name#")
-            }
-            items.append(item)
-    return items
-            
-    
-    
+    ts = datetime.now().isoformat()
+    for achievement, achievement_table in potential_achievements.items():
+        for guid, player_value in achievement_table.items():
+            if int(player_value) > int(achievements_old.get(guid + "#" + achievement,0)):
+                item = {
+                    'pk'            : "player" + "#" + guid,
+                    'sk'            : "achievement#" + achievement + "#" + match_region_type,
+                    'lsipk'         : "achievement#" + ts,
+                    'gsi1pk'        : "leader#" + achievement + "#" + match_region_type,
+                    'gsi1sk'        : str(player_value).zfill(6),
+                    "real_name"     : real_names.get(guid, "no_name#"),
+                    "match_id"      : match_id
+                }
+                items.append(item)
     return items
 
 def calculate_accuracy(player_stat):
