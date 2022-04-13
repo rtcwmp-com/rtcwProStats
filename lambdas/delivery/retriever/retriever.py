@@ -392,7 +392,7 @@ def handler(event, context):
             
         logger.info("Parameters: " + category + " " + region + " " + type_)
 
-        projection = "pk, gsi1sk, real_name"
+        projection = "pk, gsi1sk, real_name, match_id"
         if category.lower() not in ["elo", "kdr", "acc"]:
             pk = "leader#" + category + "#" + region + "#" + type_
         else:
@@ -848,11 +848,11 @@ def process_leader_response(response):
         try:
             for item in response:
                leader_line = {}
-               # leader_line['updated'] = item["updated"]
                leader_line['real_name'] = item.get("real_name","no_name#")
                leader_line['value'] = float(item["gsi1sk"])
                leader_line['guid'] = item["pk"].split("#")[1]
-               leader_line['games'] = int(item.get("games",-1)) 
+               leader_line['games'] = int(item.get("games",-1))
+               leader_line['match_id'] = int(item.get("match_id",-1)) 
                data.append(leader_line)
         except:
             item_info = "unkown"
@@ -1033,7 +1033,7 @@ if __name__ == "__main__":
     {
       "resource": "/leaders/{category}/region/{region}/type/{type}/limit/{limit}",
       "pathParameters": {
-        "category": "elo",
+        "category": "Combat Medic",
         "region": "na",
         "type": "6",
         "limit": "5"
@@ -1093,5 +1093,5 @@ if __name__ == "__main__":
     }
     '''
  
-    event = json.loads(event_str_stats_group)
+    event = json.loads(event_str_leader_limit)
     print(handler(event, None)['body'])
