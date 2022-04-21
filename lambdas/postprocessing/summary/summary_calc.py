@@ -100,7 +100,7 @@ def process_rtcwpro_summary(ddb_table, ddb_client, event_client, match_id, log_s
     wstats_items = ddb_prepare_statswstats_items("wstats", wstats_dict_updated, match_region_type, real_names, games_dict)
 
     try:
-        achievements_class = Achievements(stats)
+        achievements_class = Achievements(stats, wstats)
         potential_achievements = achievements_class.potential_achievements
     except Exception as ex:
         template = "An exception of type {0} occurred. Arguments:\n{1!r}"
@@ -440,51 +440,51 @@ def create_batch_write_structure(table_name, items, start_num, batch_size):
 
 
 def ddb_batch_write(client, table_name, items):
-        messages = ""
-        num_items = len(items)
-        logger.info(f'Performing ddb_batch_write to dynamo with {num_items} items.')
-        start = 0
-        batch_size = 25
-        while True:
-            # Loop adding 25 items to dynamo at a time
-            request_items = create_batch_write_structure(table_name,items, start, batch_size)
-            if not request_items:
-                break
-            try: 
-                response = client.batch_write_item(RequestItems=request_items)
-            except ClientError as err:
-                logger.error(err.response['Error']['Message'])
-                logger.error("Failed to run full batch_write_item")
-                raise
-            if len(response['UnprocessedItems']) == 0:
-                logger.info(f'Wrote a batch of about {batch_size} items to dynamo')
-            else:
-                # Hit the provisioned write limit
-                logger.warning('Hit write limit, backing off then retrying')
-                sleep_time = 5 #seconds
-                logger.warning(f"Sleeping for {sleep_time} seconds")
-                _time.sleep(sleep_time)
+    messages = ""
+    num_items = len(items)
+    logger.info(f'Performing ddb_batch_write to dynamo with {num_items} items.')
+    start = 0
+    batch_size = 25
+    while True:
+        # Loop adding 25 items to dynamo at a time
+        request_items = create_batch_write_structure(table_name,items, start, batch_size)
+        if not request_items:
+            break
+        try: 
+            response = client.batch_write_item(RequestItems=request_items)
+        except ClientError as err:
+            logger.error(err.response['Error']['Message'])
+            logger.error("Failed to run full batch_write_item")
+            raise
+        if len(response['UnprocessedItems']) == 0:
+            logger.info(f'Wrote a batch of about {batch_size} items to dynamo')
+        else:
+            # Hit the provisioned write limit
+            logger.warning('Hit write limit, backing off then retrying')
+            sleep_time = 5 #seconds
+            logger.warning(f"Sleeping for {sleep_time} seconds")
+            _time.sleep(sleep_time)
 
-                # Items left over that haven't been inserted
+            # Items left over that haven't been inserted
+            unprocessed_items = response['UnprocessedItems']
+            logger.warning('Resubmitting items')
+            # Loop until unprocessed items are written
+            while len(unprocessed_items) > 0:
+                response = client.batch_write_item(RequestItems=unprocessed_items)
+                # If any items are still left over, add them to the
+                # list to be written
                 unprocessed_items = response['UnprocessedItems']
-                logger.warning('Resubmitting items')
-                # Loop until unprocessed items are written
-                while len(unprocessed_items) > 0:
-                    response = client.batch_write_item(RequestItems=unprocessed_items)
-                    # If any items are still left over, add them to the
-                    # list to be written
-                    unprocessed_items = response['UnprocessedItems']
 
-                    # If there are items left over, we could do with
-                    # sleeping some more
-                    if len(unprocessed_items) > 0:
-                        sleep_time = 5 #seconds
-                        logger.warning(f"Sleeping for {sleep_time} seconds")
-                        _time.sleep(sleep_time)
+                # If there are items left over, we could do with
+                # sleeping some more
+                if len(unprocessed_items) > 0:
+                    sleep_time = 5 #seconds
+                    logger.warning(f"Sleeping for {sleep_time} seconds")
+                    _time.sleep(sleep_time)
 
-                # Inserted all the unprocessed items, exit loop
-                logger.warning('Unprocessed items successfully inserted')
-                break
-            if response["ResponseMetadata"]['HTTPStatusCode'] != 200:
-                messages += f"\nBatch {start} returned non 200 code"
-            start += 25
+            # Inserted all the unprocessed items, exit loop
+            logger.warning('Unprocessed items successfully inserted')
+            break
+        if response["ResponseMetadata"]['HTTPStatusCode'] != 200:
+            messages += f"\nBatch {start} returned non 200 code"
+        start += 25

@@ -7,6 +7,7 @@ from summary_calc import process_rtcwpro_summary
 # for lambda execution runtime use dynamic reference
 if __name__ == "__main__":
     TABLE_NAME = "rtcwprostats-database-DDBTable2F2A2F95-1BCIOU7IE3DSE"
+    CUSTOM_BUS = "fake"
 else:
     TABLE_NAME = os.environ['RTCWPROSTATS_TABLE_NAME']
     CUSTOM_BUS = os.environ['RTCWPROSTATS_CUSTOM_BUS_ARN']
@@ -43,5 +44,5 @@ def handler(event, context):
 
 
 if __name__ == "__main__":
-    event = 1649731485
+    event = 1649563154
     handler(event, None)
