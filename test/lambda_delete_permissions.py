@@ -11,7 +11,7 @@ def clean_policy(fn_name):
         client.remove_permission(FunctionName=fn_name, StatementId=sid)
     print(client.get_policy(FunctionName=fn_name))
     
-clean_policy("kek")
+clean_policy("arn:aws:lambda:us-east-1:793070529856:function:rtcwpro-retriever")
 
 # saving for later; did not test
 

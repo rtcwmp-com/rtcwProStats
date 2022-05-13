@@ -256,7 +256,6 @@ def handler(event, context):
         error_msg = template.format(type(ex).__name__, ex.args)
         message = "Failed to announce new players via event bridge in " + gamestats["gameinfo"]["match_id"] + "\n" + error_msg
         logger.error(message)
-        return message
     else:
         if response and response['ResponseMetadata']['HTTPStatusCode'] == 200:
             logger.info("Submitted new player event(s)")

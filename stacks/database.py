@@ -6,7 +6,8 @@ from aws_cdk.aws_dynamodb import (
     Attribute,
     AttributeType,
     BillingMode,
-    TableEncryption
+    TableEncryption,
+    ProjectionType
 )
 
 
@@ -34,13 +35,13 @@ class DatabaseStack(Stack):
             # projection_type = ProjectionType.ALL
         )
 
-#        ddb_table.add_global_secondary_index(
-#            partition_key=Attribute(name="gsi2pk", type=AttributeType.STRING),
-#            sort_key=Attribute(name="gsi2sk", type=AttributeType.STRING),
-#            index_name = "gsi2",
-#            #non_key_attributes=[],
-#            #projection_type = ProjectionType.ALL
-#        )
+        ddb_table.add_global_secondary_index(
+            partition_key=Attribute(name="gsi2pk", type=AttributeType.STRING),
+            sort_key=Attribute(name="gsi2sk", type=AttributeType.STRING),
+            index_name = "gsi2",
+            non_key_attributes=["eventtype","eventdesc"],
+            projection_type = ProjectionType.INCLUDE
+        )
 
         ddb_table.add_local_secondary_index(
             sort_key=Attribute(name="lsipk", type=AttributeType.STRING),

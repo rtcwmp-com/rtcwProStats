@@ -91,6 +91,10 @@ def ddb_prepare_group_item(region_match_type, matches, submitter_ip):
         'lsipk' : region_match_type + "#" + group_name_ts,
         'gsi1pk': "group",
         'gsi1sk': region_match_type + "#" + ts,
+        'gsi2pk'        : "event",
+        'gsi2sk'        : ts,
+        'eventtype': 'New monthly group',
+        'eventdesc': group_name,
         'data'  : json.dumps(matches),
         "submitter_ip": submitter_ip
     }

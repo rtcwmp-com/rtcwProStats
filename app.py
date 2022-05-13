@@ -17,6 +17,8 @@ from stacks.taskfunnel import TaskFunnelStack
 from stacks.custom_bus import CustomBusStack
 from stacks.gamelog_lambda import GamelogLambdaStack
 
+import aws_cdk.aws_iam as iam
+
 from stacks.settings import (
     cert_arn,
     api_key,
@@ -26,6 +28,21 @@ from stacks.settings import (
     hosted_zone_id,
     zone_name
 )
+
+def print_cdk_tree(construct_, level=0):
+    """Recursively print nodes of constructs in the app."""
+    level = level + 1
+    try:
+        for lower_construct in construct_.node.children:
+            try:
+                print(("Level " + str(level) + ":").rjust(9 + level * 4) + lower_construct.node.id)
+                print_cdk_tree(lower_construct, level)
+            except Exception as ex:
+                print("Could not print something under " + construct_.node.id)
+                print(ex)
+    except Exception as ex:
+        print("!!!!!!!!!!Could not iterate over " + construct_.node.id)
+        print(ex)
 
 app = cdk.App()
 
@@ -103,7 +120,34 @@ DeliveryStack(app, "rtcwprostats-delivery",
               delivery_writer=delivery_writer.delivery_writer_lambda,
               env=env)
 
+def strip_permissions(node):
+    for child in node.children:
+        if(isinstance(child, cdk.aws_apigateway.Method)):
+            method = child
+            for method_child in method.node.children:
+                if(isinstance(method_child, cdk.aws_lambda.CfnPermission)):
+                    # print(method_child)
+                    # print("DELETE THIS")
+                    method.node.try_remove_child(method_child.node.id)
+                    # print("new method.node")
+                    # print(method.node.children)
+        else:
+            # print(child)
+            # print("recurse")
+            strip_permissions(child.node)
+
+print("Deleting lambda resource policies from API lambdas")
+strip_permissions(apistack.node)
+print("Adding lambda resource policies for API lambdas")
+retriever.retriever_lambda.grant_invoke(iam.ServicePrincipal("apigateway.amazonaws.com"))
+apistack.save_payload.grant_invoke(iam.ServicePrincipal("apigateway.amazonaws.com"))
+delivery_writer.delivery_writer_lambda.grant_invoke(iam.ServicePrincipal("apigateway.amazonaws.com"))
+
 
 cdk.Tags.of(app).add("purpose", "rtcwpro")
+
+""" This recursive function traverses CDK app class and displays its nested contents."""
+
+# print_cdk_tree(app)
 
 app.synth()

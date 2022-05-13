@@ -523,6 +523,24 @@ def handler(event, context):
         responses = get_query_all(pk_name, pk, ddb_table, log_stream_name, limit)
         data = process_server_responses(api_path, responses)
     
+    if api_path == "/events/{limit}":
+        logger.info("Processing " + api_path)
+
+        limit_str = event["pathParameters"]["limit"]
+        logger.info("Parameter: " + limit_str)
+        pk_name = "gsi2pk"
+        pk = "event"
+        index_name = "gsi2"
+        skname="gsi2sk"
+        projections = "eventtype,eventdesc, gsi2sk"
+        limit = 100
+        if limit_str.isdigit():
+            limit = min(int(limit_str),limit)
+        ascending = False
+        begins_with = "2"  # fix by year 3000
+        responses = get_begins(pk_name, pk, begins_with, ddb_table, index_name, skname, projections, log_stream_name, limit, ascending)  
+        data = process_event_responses(api_path, responses)
+    
     if api_path == "/servers/region/{region}" or api_path == "/servers/region/{region}/active":
         logger.info("Processing " + api_path)
         region = event["pathParameters"]["region"]
@@ -775,9 +793,28 @@ def process_server_responses(api_path, responses):
             else:
                 data_line["last_submission"] = '2021-07-31 23:59:59'
             data_line["submissions"]=int(server["submissions"])
-            data_line["IP"]=server["data"]['serverIP']
+            server_ip = server["data"]['serverIP']
+            if "80.201" in server_ip:
+                server_ip = "hidden"
+            data_line["IP"] = server_ip
             if api_path == "/servers/detail":
                 data_line["data"]=server["data"]
+            data.append(data_line)
+    else:
+        data = responses
+    return data
+
+def process_event_responses(api_path, responses):
+    if "error" not in responses:
+        # logic specific to /events
+        data = []
+        for event in responses:
+            data_line = {}
+            
+            data_line["eventtype"] = event["eventtype"]
+            data_line["eventdesc"] = event.get("eventdesc","n#a")
+            data_line["timestamp"] = event["gsi2sk"]
+            
             data.append(data_line)
     else:
         data = responses
@@ -1092,6 +1129,15 @@ if __name__ == "__main__":
       "pathParameters":{"group_name":"gather15943"}
     }
     '''
+    
+    event_str_event_limit = '''
+    {
+      "resource": "/events/{limit}",
+      "pathParameters": {
+        "limit": "5"
+      }
+    }
+    '''
  
-    event = json.loads(event_str_leader_limit)
+    event = json.loads(event_str_event_limit)
     print(handler(event, None)['body'])

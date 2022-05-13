@@ -397,6 +397,10 @@ def ddb_prepare_achievement_items(potential_achievements, achievements_old, real
                     'lsipk'         : "achievement#" + ts,
                     'gsi1pk'        : "leader#" + achievement + "#" + match_region_type,
                     'gsi1sk'        : str(player_value).zfill(6),
+                    'gsi2pk'        : "event",
+                    'gsi2sk'        : ts,
+                    'eventtype'     : 'New player achievement',
+                    'eventdesc'     : achievement + "#" + str(player_value).zfill(6) + "#" + match_region_type + "#" + real_names.get(guid, "no_name"),
                     "real_name"     : real_names.get(guid, "no_name#"),
                     "match_id"      : match_id
                 }

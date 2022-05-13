@@ -57,8 +57,6 @@ def ddb_update_item(key, expression, values, table):
         logger.error("Item was: " + str(key))
         #raise
     else:
-        pk = key["pk"]
-        sk = key["sk"]
         http_code = "No http code"
         
         try: 
@@ -80,7 +78,8 @@ def ddb_update_server_record(gamestats, table, region, date_time_human):
     ddb_update_item(key, expression, values, table)
 
 def ddb_prepare_server_item(gamestats):
-
+    
+    ts = datetime.now().isoformat()
     region = guess_server_country(gamestats)
     server_name = gamestats["serverinfo"].get("serverName", "No server name#")
     
@@ -89,6 +88,10 @@ def ddb_prepare_server_item(gamestats):
         'sk'    : server_name,
         'lsipk' : region + '#' + gamestats["gameinfo"]["date_time_human"],
         'data'  : gamestats["serverinfo"],
+        'gsi2pk': "event",
+        'gsi2sk': ts,
+        'eventtype': 'New server added',
+        'eventdesc': region + "#" + server_name,
         'submissions' : 1,
         'region' : region
         }
@@ -286,10 +289,16 @@ def ddb_prepare_real_name_update(gamestats, real_names):
                 'data'  :  real_name,
                 'updated': ts
                 }
+            if playerguid not in real_names:
+                player_item["eventtype"] = "New user added"
+                player_item["eventdesc"] = stat["alias"]
+                player_item["gsi1pk"] = "event"
+                player_item["gsi1sk"] = ts
             
             if playerguid not in duplicates_check:
                 player_items.append(player_item)
                 duplicates_check[playerguid]=1
+            
     return player_items
 
 def ddb_prepare_log_item(match_id_rnd,file_key,

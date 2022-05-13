@@ -14,27 +14,6 @@ class DeliveryStack(Stack):
         retriever_integration = apigw.LambdaIntegration(retriever)
         delivery_writer_integration = apigw.LambdaIntegration(delivery_writer)
 
-# =============================================================================
-#         API
-#         ---submit (defined in api stack)
-# 1       ---matches
-# 2       |------{proxy+}
-# 3       ---stats/{match_id}
-# 4       |-------/player/{guid}
-# 5       |-------/type/{type}
-# 6       ---wstats/{match_id}
-# 7       |-------/player/{player_guid}
-# 8       |-------/player/{player_guid}/match/{match_id}
-# 9       ---gamelogs/{match_round_id}
-#10       ---/player/{player_guid}
-#20       |---------/search/{begins_with}
-#30       ---/server
-#31       |---------/region/{region}
-        
-          
-
-# =============================================================================
-
         # 1
         matches = api.root.add_resource("matches")
 
@@ -156,6 +135,9 @@ class DeliveryStack(Stack):
         aliases_recent = aliases.add_resource("recent").add_resource("limit").add_resource("{limit}")
         aliases_recent.add_method("GET", retriever_integration)
         
+        #80
+        events = api.root.add_resource("events").add_resource("{limit}")
+        events.add_method("GET", retriever_integration)
         
         
         
