@@ -74,6 +74,7 @@ x is done , / is work in progress, blank is planned
 |[x] |Aliases  |/aliases/search/{begins_with}| Get guids for partial alias match|
 |[x] |Aliases  |/aliases/player/{player_guid}| Get aliases for a player|
 |[x] |Aliases  |/aliases/recent/limit/{limit}| Get last x seen aliases |
+|[x] |Events  |/events/{limit}| Get last x pipeline events |
 
 
 Example:
@@ -143,6 +144,8 @@ https://rtcwproapi.donkanator.com/eloprogress/player/22b0e88467093a63d5dd979eec2
 
 https://rtcwproapi.donkanator.com/eloprogress/match/1632108123
 
+### Events
+https://rtcwproapi.donkanator.com/events/5
 
 
 ## Usage 
@@ -279,4 +282,5 @@ If you are an API consumer, please do your part:
 * add: discord notifications about individual achievements
 * fix: ability to group more than 25 matches
 * add: monthly automatic groups with a month worth of activity
+* add: /events/{limit} api resource
 
