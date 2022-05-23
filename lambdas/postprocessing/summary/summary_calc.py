@@ -111,7 +111,9 @@ def process_rtcwpro_summary(ddb_table, ddb_client, event_client, match_id, log_s
     potential_achievements_item_list = prepare_old_achievements_list(potential_achievements, match_region_type)
     item_list = []
     item_list.extend(potential_achievements_item_list)
-    achievments_old_response = get_batch_items(item_list, ddb_table, log_stream_name)
+    achievments_old_response = []
+    if len(item_list) > 0:
+        achievments_old_response = get_batch_items(item_list, ddb_table, log_stream_name)
     
     achievements_old = {}
     if "error" in achievments_old_response:
