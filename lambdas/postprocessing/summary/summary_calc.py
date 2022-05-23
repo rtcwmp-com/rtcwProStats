@@ -217,8 +217,9 @@ def build_new_stats_summary(stats, stats_old):
                     stats_dict_updated[guid][metric] = int(stats_old[guid][metric]) + int(metrics[metric])
             else:
                 stats_dict_updated[guid][metric] = int(metrics[metric])
-                
-        new_acc = metrics["hits"]/metrics["shots"]
+        
+        shots = metrics["shots"] if metrics["shots"] > 0 else 1
+        new_acc = metrics["hits"]/shots
         stats_dict_updated[guid]["accuracy"] = int(new_acc)
         
         efficiency = 100*stats_dict_updated[guid]["kills"]/(stats_dict_updated[guid]["kills"] + stats_dict_updated[guid]["deaths"])                
