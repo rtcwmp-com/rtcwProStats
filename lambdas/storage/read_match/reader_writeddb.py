@@ -292,8 +292,8 @@ def ddb_prepare_real_name_update(gamestats, real_names):
             if playerguid not in real_names:
                 player_item["eventtype"] = "New user added"
                 player_item["eventdesc"] = stat["alias"]
-                player_item["gsi1pk"] = "event"
-                player_item["gsi1sk"] = ts
+                player_item["gsi2pk"] = "event"
+                player_item["gsi2sk"] = ts
             
             if playerguid not in duplicates_check:
                 player_items.append(player_item)
