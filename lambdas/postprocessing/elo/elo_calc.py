@@ -144,7 +144,7 @@ def process_rtcwpro_elo(ddb_table, ddb_client, match_id, log_stream_name):
             guid = result["pk"].split("#")[1]
             if "data" in result:
                 real_names[guid] = result["data"]
-                logger.info("Retrieved " + guid + " name: " + result["data"])
+                logger.debug("Retrieved " + guid + " name: " + result["data"])
 
        
     elo_item_list = prepare_player_elo_list(stats, match_region_type)
@@ -158,7 +158,7 @@ def process_rtcwpro_elo(ddb_table, ddb_client, match_id, log_stream_name):
             if match_region_type in result["sk"]:
                 elo_dict[guid] = result["data"]
                 elo_games[guid] = int(result["games"]) 
-                logger.info("Retrieved " + match_region_type + "#elo" + " " + " " + real_names.get(guid,"no_name").ljust(20) + " elo:" + str(elo_dict[guid]) + " games " + str(elo_games[guid]))
+                logger.debug("Retrieved " + match_region_type + "#elo" + " " + " " + real_names.get(guid,"no_name").ljust(20) + " elo:" + str(elo_dict[guid]) + " games " + str(elo_games[guid]))
 
     else:
         logger.error("Failed to retrieve any player elos.")
@@ -198,16 +198,20 @@ def process_rtcwpro_elo(ddb_table, ddb_client, match_id, log_stream_name):
     items.extend(elo_delta_items)
     items.extend(player_elo_items)
     
-    try:
-        ddb_batch_write(ddb_client, ddb_table.name, items)
-    except Exception as ex:
-        template = "An exception of type {0} occurred. Arguments:\n{1!r}"
-        error_msg = template.format(type(ex).__name__, ex.args)
-        message = "Failed to load all eloprogress records for a match " + match_id + "\n" + error_msg
-        logger.info(message)
-        return message
+    if len(items) > 0:
+        try:
+            ddb_batch_write(ddb_client, ddb_table.name, items)
+        except Exception as ex:
+            template = "An exception of type {0} occurred. Arguments:\n{1!r}"
+            error_msg = template.format(type(ex).__name__, ex.args)
+            message = "Failed to load all eloprogress records for a match " + match_id + "\n" + error_msg
+            logger.info(message)
+            return message
+        else:
+            message = "Elo progress records inserted.\n"
     else:
-        message = "Elo progress records inserted.\n"
+        message = "There are no ELOs to update"
+        logger.warning(message)
     
     time_to_write = str(round((_time.time() - t1), 3))
     logger.info(f"Time to process ELOs is {time_to_write} s")
@@ -282,7 +286,7 @@ def process_elos(player_scores, elo_dict):
 
 def update_elos(elos, scores, ep):
     if len(elos) < 2:
-        return elos
+        return ({}, elos)
 
     pids = list(elos.keys())
 
