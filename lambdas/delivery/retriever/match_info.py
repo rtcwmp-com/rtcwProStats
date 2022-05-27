@@ -148,7 +148,7 @@ def infer_winners_bandaid(results, match_dict):
     """Determine winner of the game before this issue is closed and tested.
     https://github.com/rtcwmp-com/rtcwPro/issues/369 ."""
     
-    offense_allied = ["mp_base", "mp_sub","braundorf_b7", "mp_password2", "mp_village","bd_bunker_b2", "mp_beach","te_adlernest_b1","te_cipher_b5","te_delivery_b1","te_escape2","te_frostbite", "te_ufo"]
+    offense_allied = ["mp_base", "mp_sub","braundorf_b7", "mp_password2", "mp_village","bd_bunker_b2", "mp_beach","te_adlernest_b1","te_cipher_b5","te_delivery_b1","te_escape2","te_frostbite", "te_ufo","sub2_b7","mp_rocket","mp_castle","sw_tram_b2"]
     offense_axis = ["mp_assault", "mp_ice", "te_kungfugrip"]
     
     for match_id, info in results.items():
