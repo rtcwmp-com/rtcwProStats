@@ -40,7 +40,7 @@ class ReadMatchStack(Stack):
             code=_lambda.Code.from_asset('lambdas/storage/read_match'),
             role=read_match_role,
             tracing=lambda_tracing,
-            timeout=Duration.seconds(10),
+            timeout=Duration.seconds(30),
             environment={
                 'RTCWPROSTATS_TABLE_NAME': ddb_table.table_name,
                 'RTCWPROSTATS_MATCH_STATE_MACHINE': postproc_state_machine.state_machine_arn,
