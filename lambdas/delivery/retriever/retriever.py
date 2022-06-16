@@ -1,6 +1,6 @@
 import json
 import boto3
-from boto3.dynamodb.conditions import Key
+from boto3.dynamodb.conditions import Attr, Key
 from botocore.exceptions import ClientError
 import time
 import logging
@@ -388,18 +388,21 @@ def handler(event, context):
         if api_path == "/leaders/{category}/region/{region}/type/{type}/limit/{limit}":
             limit = int(event["pathParameters"]["limit"])
         else:
-            limit = 20
+            limit = 50
             
         logger.info("Parameters: " + category + " " + region + " " + type_)
 
         projection = "pk, gsi1sk, real_name, match_id"
+
+        only_recent = True
         if category.lower() not in ["elo", "kdr", "acc"]:
             pk = "leader#" + category + "#" + region + "#" + type_
+            only_recent = False
         else:
             pk = "leader" + category + "#" + region + "#" + type_
             projection += ", games"
         
-        response = get_leaders(pk, ddb_table, projection, limit, log_stream_name)
+        response = get_leaders(pk, ddb_table, projection, limit, only_recent, log_stream_name)
         data = process_leader_response(response)
     
     if api_path == "/eloprogress/player/{player_guid}/region/{region}/type/{type}":
@@ -676,11 +679,31 @@ def get_items_pk(pk, table, log_stream_name):
             result = make_error_dict("[x] Items do not exist: ", item_info)
     return result
 
-def get_leaders(pk, table, projection, limit, log_stream_name):
+def get_leaders(pk, table, projection, limit, only_recent, log_stream_name):
     """Get several items by pk."""
     item_info = pk + " Logstream: " + log_stream_name
+
     try:
-        response = table.query(IndexName='gsi1', KeyConditionExpression=Key('gsi1pk').eq(pk), ProjectionExpression=projection, ScanIndexForward=False, Limit=limit,ReturnConsumedCapacity='NONE')
+        response = {"Count" : 0}
+        if only_recent:
+            dt = datetime.datetime.now() - datetime.timedelta(days=30)
+            dt_str = dt.isoformat()
+            response = table.query(IndexName='gsi1',
+                                   KeyConditionExpression=Key('gsi1pk').eq(pk),
+                                   ProjectionExpression=projection,
+                                   ScanIndexForward=False,
+                                   FilterExpression=Attr('updated').gt(dt_str),
+                                   Limit=limit,
+                                   ReturnConsumedCapacity='NONE')
+        if response['Count'] < 10 and limit > 0:  # results are drying up; retry once without filter
+            if only_recent:
+                logger.warning("Leaders API requirying due to low number of leaders " + pk)
+            response = table.query(IndexName='gsi1',
+                                   KeyConditionExpression=Key('gsi1pk').eq(pk),
+                                   ProjectionExpression=projection,
+                                   ScanIndexForward=False,
+                                   Limit=limit,
+                                   ReturnConsumedCapacity='NONE')
     except ClientError as e:
         logger.warning("Exception occurred: " + e.response['Error']['Message'])
         result = make_error_dict("[x] Client error calling database: ", item_info)
@@ -1060,7 +1083,7 @@ if __name__ == "__main__":
       "resource": "/leaders/{category}/region/{region}/type/{type}",
       "pathParameters": {
         "category": "elo",
-        "region": "sa",
+        "region": "na",
         "type": "6"
       }
     }
@@ -1139,5 +1162,5 @@ if __name__ == "__main__":
     }
     '''
  
-    event = json.loads(event_str_event_limit)
+    event = json.loads(event_str_leader)
     print(handler(event, None)['body'])
