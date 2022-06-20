@@ -21,7 +21,7 @@ def ddb_get_item(pk, sk, table):
         logger.warning("Exception occurred: " + e.response['Error']['Message'])
         raise
     else:
-        if "Item" in response:    
+        if "Item" in response:
             result = response['Item']
     return result
 
@@ -45,26 +45,29 @@ def ddb_get_server(sk, table):
         logger.warning("Exception occurred: " + e.response['Error']['Message'])
         raise
     else:
-        if "Item" in response:    
+        if "Item" in response:
             result = response['Item']
     return result
 
 def ddb_update_item(key, expression, values, table):
-    try: 
-        response = table.update_item(Key=key, UpdateExpression=expression,ExpressionAttributeValues=values, ExpressionAttributeNames={"#data_value": "data"})
+    try:
+        if '#data_value' in expression:
+            response = table.update_item(Key=key, UpdateExpression=expression,ExpressionAttributeValues=values, ExpressionAttributeNames={"#data_value": "data"})
+        else:
+            response = table.update_item(Key=key, UpdateExpression=expression, ExpressionAttributeValues=values)
     except botocore.exceptions.ClientError as err:
         logger.error(err.response['Error']['Message'])
         logger.error("Item was: " + str(key))
         #raise
     else:
         http_code = "No http code"
-        
-        try: 
+
+        try:
             http_code = response['ResponseMetadata']['HTTPStatusCode']
-        except: 
+        except:
             http_code = "Could not retrieve http code"
             logger.error("Could not retrieve http code from response\n" + str(response))
-        
+
         if http_code != 200:
             logger.error(f"Erroneous HTTP Code ({http_code}) while updating an item \n" + str(key) + "\n" + str(response))
 
@@ -77,12 +80,23 @@ def ddb_update_server_record(gamestats, table, region, date_time_human):
     values = {':val1': 1, ':val2': region + "#" + date_time_human, ':val3': gamestats["serverinfo"]}
     ddb_update_item(key, expression, values, table)
 
+def ddb_update_user_records(guids, table):
+    ts = datetime.now().isoformat()
+    for guid in guids:
+        key = {
+            'pk'    : "player#" + guid,
+            'sk'    : "realname"
+            }
+        expression = 'SET updated = :val1'
+        values = {':val1': ts}
+        ddb_update_item(key, expression, values, table)
+
 def ddb_prepare_server_item(gamestats):
-    
+
     ts = datetime.now().isoformat()
     region = guess_server_country(gamestats)
     server_name = gamestats["serverinfo"].get("serverName", "No server name#")
-    
+
     server_item = {
         'pk'    : 'server',
         'sk'    : server_name,
@@ -98,7 +112,7 @@ def ddb_prepare_server_item(gamestats):
     return server_item
 
 def ddb_put_item(Item, table):
-    try: 
+    try:
         response = table.put_item(Item=Item)
     except botocore.exceptions.ClientError as err:
         logger.error(err.response['Error']['Message'])
@@ -108,13 +122,13 @@ def ddb_put_item(Item, table):
         pk = Item["pk"]
         sk = Item["sk"]
         http_code = "No http code"
-        
-        try: 
+
+        try:
             http_code = response['ResponseMetadata']['HTTPStatusCode']
-        except: 
+        except:
             http_code = "Could not retrieve http code"
             logger.error("Could not retrieve http code from response\n" + str(response))
-        
+
         if http_code != 200:
             logger.error("Unhandled HTTP Code " + str(http_code) + " while submitting item " + pk + ":" + sk + "\n" + str(response))
     return response
@@ -132,22 +146,22 @@ def ddb_prepare_match_item(gamestats):
     return match_item
 
 def ddb_prepare_stats_items(gamestats):
-    
+
     #debug
-    #playerguid = list(gamestats["stats"][0].keys())[0] 
+    #playerguid = list(gamestats["stats"][0].keys())[0]
     #stat = gamestats["stats"][0][playerguid]
-    
+
     #this is some stupid fix ddb requires
     #nevermind... saving everything as strings
     # https://github.com/boto/boto3/issues/665
     #from decimal import Decimal
     #stat["categories"]["accuracy"] = Decimal(str(stat["categories"]["accuracy"]))
     #stat["categories"]["efficiency"] = Decimal(str(stat["categories"]["efficiency"]))
-    
+
     stats_items = []
     duplicates_check = {}
     matchid = gamestats["gameinfo"]["match_id"]
-    
+
     tmp_stats_unnested = fix_stats_nesting(gamestats)
     for player_item in tmp_stats_unnested:
         for playerguid, stat in player_item.items():
@@ -164,7 +178,7 @@ def ddb_prepare_stats_items(gamestats):
             else:
                 stats_items.append(stats_item)
                 duplicates_check[playerguid]=1
-                   
+
     logger.info("Number of players in stats_items: " + str(len(stats_items)))
     return stats_items
 
@@ -192,7 +206,7 @@ def ddb_prepare_wstat_items_obsolete(gamestats):
     wstat_items = []
     matchid = gamestats["gameinfo"]["match_id"]
     for player in gamestats['wstats']:
-        playerguid = list(player.keys())[0] #this could be fixed 
+        playerguid = list(player.keys())[0] #this could be fixed
         if player_guids[playerguid] > 0:
             continue
         player_guids[playerguid] +=1
@@ -211,7 +225,7 @@ def ddb_prepare_wstat_items(gamestats):
     wstat_items = []
     matchid = gamestats["gameinfo"]["match_id"]
     for player in gamestats['wstats']:
-        playerguid = list(player.keys())[0] #this could be fixed 
+        playerguid = list(player.keys())[0] #this could be fixed
         if player_guids[playerguid] > 0: #in January 2021 some players were repeating
             continue
         player_guids[playerguid] +=1
@@ -224,7 +238,7 @@ def ddb_prepare_wstat_items(gamestats):
         wstat_items.append(wstat_item)
     return wstat_items
 
-def ddb_prepare_wstatsall_item(gamestats):   
+def ddb_prepare_wstatsall_item(gamestats):
     inject_json_version(gamestats['wstats'], gamestats)
     wstatsall_item ={
             'pk'    : "wstatsall",
@@ -252,7 +266,7 @@ def ddb_prepare_alias_items(gamestats):
         else:
             player_items.append(player_item)
             duplicates_check[playerguid]=1
-        
+
     return player_items
 
 def ddb_prepare_alias_items_v2(gamestats, real_names):
@@ -275,48 +289,50 @@ def ddb_prepare_alias_items_v2(gamestats, real_names):
     return player_items
 
 def ddb_prepare_real_name_update(gamestats, real_names):
-    player_items = []
+    new_player_items = []
+    old_player_items = []
     ts = datetime.now().isoformat()
     duplicates_check = {}
     for player_wrapper in gamestats["stats"]:
         for playerguid, stat in player_wrapper.items():
-            real_name = real_names.get(playerguid,stat["alias"])
-            player_item = {
-                'pk'    : "player#" + playerguid,
-                'sk'    : "realname",
-                'gsi1pk': "realname",
-                'gsi1sk': "realname#" + real_name,
-                'data'  :  real_name,
-                'updated': ts
-                }
             if playerguid not in real_names:
-                player_item["eventtype"] = "New user added"
-                player_item["eventdesc"] = stat["alias"]
-                player_item["gsi2pk"] = "event"
-                player_item["gsi2sk"] = ts
-            
-            if playerguid not in duplicates_check:
-                player_items.append(player_item)
-                duplicates_check[playerguid]=1
-            
-    return player_items
+                real_name = real_names.get(playerguid,stat["alias"])
+                player_item = {
+                    'pk'    : "player#" + playerguid,
+                    'sk'    : "realname",
+                    'gsi1pk': "realname",
+                    'gsi1sk': "realname#" + real_name,
+                    'data'  :  real_name,
+                    'updated': ts,
+                    'eventtype': 'New user added',
+                    'eventdesc': stat["alias"],
+                    'gsi2pk': "event",
+                    'gsi2sk': ts
+                    }
+                if playerguid not in duplicates_check:
+                    new_player_items.append(player_item)
+                    duplicates_check[playerguid] = 1
+            else:
+                old_player_items.append(playerguid)
+
+    return new_player_items, old_player_items
 
 def ddb_prepare_log_item(match_id_rnd,file_key,
-                         match_item_size, 
-                         num_stats_items, 
+                         match_item_size,
+                         num_stats_items,
                          statsall_item_size,
                          gamelog_item_size,
                          num_wstats_items,
                          wstatsall_item_size,
                          num_player_items,
                          #timestamp,
-                         submitter_ip):    
+                         submitter_ip):
     log_item ={
             'pk'            : "match",
             'sk'            : "log#" + match_id_rnd + "#" + file_key,
             'lsipk'         : "log#" + file_key + "#" + match_id_rnd,
-            'match_size'    : match_item_size, 
-            'stats_num'     : num_stats_items, 
+            'match_size'    : match_item_size,
+            'stats_num'     : num_stats_items,
             'statsall_size' : statsall_item_size,
             'gamelog_size'  : gamelog_item_size,
             'num_wstats'    : num_wstats_items,
@@ -337,7 +353,7 @@ def create_batch_write_structure(table_name, items, start_num, batch_size):
     :param num_items: Number of items
     :return: dictionary of tables to write to
     """
-    
+
     serializer = boto3.dynamodb.types.TypeSerializer()
     item_batch = { table_name: []}
     item_batch_list = items[start_num : start_num + batch_size]
@@ -346,7 +362,7 @@ def create_batch_write_structure(table_name, items, start_num, batch_size):
     for item in item_batch_list:
         item_serialized = {k: serializer.serialize(v) for k,v in item.items()}
         item_batch[table_name].append({'PutRequest': {'Item': item_serialized}})
-                
+
     return item_batch
 
 def ddb_batch_write(client, table_name, items):
@@ -360,7 +376,7 @@ def ddb_batch_write(client, table_name, items):
             request_items = create_batch_write_structure(table_name,items, start, batch_size)
             if not request_items:
                 break
-            try: 
+            try:
                 response = client.batch_write_item(RequestItems=request_items)
             except botocore.exceptions.ClientError as err:
                 logger.error(err.response['Error']['Message'])
@@ -403,7 +419,7 @@ def ddb_batch_write(client, table_name, items):
 def inject_json_version(obj, gamestats):
     if isinstance(obj, list):
         logger.info("Skipping list while inserting the versions")  # TODO
-    elif isinstance(obj, dict):  
+    elif isinstance(obj, dict):
         obj['jsonGameStatVersion'] = gamestats["serverinfo"]["jsonGameStatVersion"]
     else:
         logger.warning("Unidentified stats object!")
@@ -415,7 +431,7 @@ def fix_stats_nesting(gamestats):
             for k,v in gamestats["stats"][0].items():
                 stats_new_object.append({k:v})
             for k,v in gamestats["stats"][1].items():
-                stats_new_object.append({k:v})   
+                stats_new_object.append({k:v})
             logger.info("New statsall has " + str(len(stats_new_object)) + " players")
     else:
         stats_new_object = gamestats["stats"]

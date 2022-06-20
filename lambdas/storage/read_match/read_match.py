@@ -22,7 +22,8 @@ from reader_writeddb import (
     ddb_prepare_server_item,
     ddb_get_server,
     ddb_prepare_alias_items_v2,
-    ddb_prepare_real_name_update
+    ddb_prepare_real_name_update,
+    ddb_update_user_records
 )
 
 # pip install --target ./ sqlalchemy
@@ -171,7 +172,7 @@ def handler(event, context):
     wstatsall_item = ddb_prepare_wstatsall_item(gamestats)
     # alias_items = ddb_prepare_alias_items(gamestats)
     aliasv2_items = ddb_prepare_alias_items_v2(gamestats, real_names)
-    real_name_updates = ddb_prepare_real_name_update(gamestats, real_names)
+    new_player_items, old_player_items = ddb_prepare_real_name_update(gamestats, real_names)
     log_item = ddb_prepare_log_item(match_id, file_key,
                                     len(match_item["data"]),
                                     len(stats_items),
@@ -191,7 +192,7 @@ def handler(event, context):
     items.append(wstatsall_item)
     # items.extend(alias_items)
     items.extend(aliasv2_items)
-    items.extend(real_name_updates)
+    items.extend(new_player_items)
     items.append(log_item)
     if server_item:
         items.append(server_item)
@@ -222,6 +223,15 @@ def handler(event, context):
         message = "Failed to load all records for a match " + file_key + "\n" + error_msg
         logger.error(message)
         return message
+
+    try:
+        ddb_update_user_records(old_player_items, table)
+        logger.info(f"Updated player dates for {match_id}")
+    except Exception as ex:
+        template = "An exception of type {0} occurred. Arguments:\n{1!r}"
+        error_msg = template.format(type(ex).__name__, ex.args)
+        message = "Failed to update all player dates for a match " + match_id + "\n" + error_msg
+        logger.warning(message)
 
     try:
         response = sf_client.start_execution(stateMachineArn=MATCH_STATE_MACHINE,
@@ -390,8 +400,8 @@ if __name__ == "__main__":
     event = {"Records":
              [
                  {
-                     "body": "{\"Records\":[{\"s3\":{\"bucket\":{\"name\":\"rtcwprostats\"},\"object\":{\"key\":\"intake/20210916-144606-1631803341.txt\"}}}]}"
+                     "body": "{\"Records\":[{\"s3\":{\"bucket\":{\"name\":\"rtcwprostats\"},\"object\":{\"key\":\"intake/20220620-030959-1655694370.txt\"}}}]}"
                  }
              ]
              }
-    # print("Test result" + handler(event, None))
+    print("Test result" + handler(event, None))
