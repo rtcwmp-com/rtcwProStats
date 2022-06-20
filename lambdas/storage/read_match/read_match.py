@@ -170,7 +170,6 @@ def handler(event, context):
     gamelog_item = ddb_prepare_gamelog_item(gamestats)
     wstats_items = ddb_prepare_wstat_items(gamestats)
     wstatsall_item = ddb_prepare_wstatsall_item(gamestats)
-    # alias_items = ddb_prepare_alias_items(gamestats)
     aliasv2_items = ddb_prepare_alias_items_v2(gamestats, real_names)
     new_player_items, old_player_items = ddb_prepare_real_name_update(gamestats, real_names)
     log_item = ddb_prepare_log_item(match_id, file_key,
@@ -190,7 +189,6 @@ def handler(event, context):
     items.append(gamelog_item)
     items.extend(wstats_items)
     items.append(wstatsall_item)
-    # items.extend(alias_items)
     items.extend(aliasv2_items)
     items.extend(new_player_items)
     items.append(log_item)

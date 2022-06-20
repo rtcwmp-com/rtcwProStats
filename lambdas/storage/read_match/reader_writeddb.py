@@ -247,28 +247,6 @@ def ddb_prepare_wstatsall_item(gamestats):
         }
     return wstatsall_item
 
-def ddb_prepare_alias_items(gamestats):
-    player_items = []
-    duplicates_check = {}
-    matchid = gamestats["gameinfo"]["match_id"]
-    for player_wrapper in gamestats["stats"]:
-        for playerguid, stat in player_wrapper.items():
-            player_item = {
-                'pk'    : "aliases" + "#" + playerguid,
-                'sk'    : matchid,
-                'lsipk' : datetime.now().isoformat(),
-                'gsi1pk': "aliassearch",
-                'gsi1sk': stat["alias"],
-                'data'  : stat["alias"]
-                }
-        if playerguid in duplicates_check:
-            logger.warning("Skipping duplicate player in aliases " + playerguid)
-        else:
-            player_items.append(player_item)
-            duplicates_check[playerguid]=1
-
-    return player_items
-
 def ddb_prepare_alias_items_v2(gamestats, real_names):
     player_items = []
     matchid = gamestats["gameinfo"]["match_id"]
