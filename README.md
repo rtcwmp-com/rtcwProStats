@@ -48,6 +48,7 @@ x is done , / is work in progress, blank is planned
 |[x] |Matches |/matches/{match_round_id_1},{match_round_id_N} |Get match info(s) |
 |[x] |Matches |/matches/type/{region}/{type} |Filter type of matches by region (sa na eu, unk) and type(3,6,6plus) |
 |[x] |Matches |/matches/recent |Filter by last 30 days to get matches |
+|[x] |Matches |/matches/health/{region}/{type} | Get match health stats for periods of time  |
 |[x] |Matches |/matches/recent/{days} |Filter by last x days to get recent matches |
 |[x] |Matches |/matches/server/{begins_with} |Get 100 recent matches from a server |
 |[x] |Gamelog |/gamelogs/{match_round_id} |Retrieve game log for a match |
@@ -86,6 +87,8 @@ https://rtcwproapi.donkanator.com/matches/type/na/6
 note: idenitifying server region is done by some server name parts or manually
 
 https://rtcwproapi.donkanator.com/matches/server/virg
+
+https://rtcwproapi.donkanator.com/matches/health/na/6
 
 ### Stats
 https://rtcwproapi.donkanator.com/stats/1609817356
@@ -283,4 +286,5 @@ If you are an API consumer, please do your part:
 * fix: ability to group more than 25 matches
 * add: monthly automatic groups with a month worth of activity
 * add: /events/{limit} api resource
+* add: /matches/health/na/6 api
 
