@@ -158,10 +158,36 @@ def handler(event, context):
                 else:
                     data = responses
 
+            elif path_tokens[0] == "health":
+                pk = "match"
+                limit = 600
+                region = path_tokens[1]
+                game_type = path_tokens[2]
+                if game_type.lower() not in ['3','6','6plus']:
+                    game_type = '6'
+                if region.lower() not in ['na','sa','eu','unk']:
+                    region = 'na'
+                sk_prefix = region + "#" +  game_type + "#"
+                logger.info("Health prefix : " + sk_prefix)
+
+                skhigh = int(time.time())
+                sklow = skhigh - 60 * 60 * 24 * 28  #get last 28 days for day-of-week consistency
+                responses_current = get_range("lsi", pk, sk_prefix + str(sklow), sk_prefix + str(skhigh), ddb_table, log_stream_name, limit, False)
+
+                skhigh = int(time.time()) - 60 * 60 * 24 * 7 * 5
+                sklow = int(time.time()) - 60 * 60 * 24 * 7 * 9  # get 28 days 35 days ago for day-of-week consistency
+                responses_month_ago = get_range("lsi", pk, sk_prefix + str(sklow), sk_prefix + str(skhigh), ddb_table, log_stream_name, limit, False)
+
+                skhigh = int(time.time()) - 60 * 60 * 24 * 7 * 52
+                sklow = int(time.time()) - 60 * 60 * 24 * 7 * 56  #get last 28 days exactly a year ago for day-of-week consistency. Predend leap year is not a thing.
+                responses_last_year = get_range("lsi", pk, sk_prefix + str(sklow), sk_prefix + str(skhigh), ddb_table, log_stream_name, limit, False)
+
+                data = process_match_health_responses(responses_current, responses_month_ago, responses_last_year, sk_prefix)
+
     if api_path == "/stats/player/{player_guid}" or api_path == "/stats/player/{player_guid}/region/{region}/type/{type}":
         logger.info("Processing " + api_path)
         if "player_guid" in event["pathParameters"]:
-            guid = event["pathParameters"]["player_guid"]      
+            guid = event["pathParameters"]["player_guid"]
             skhigh = int(time.time())
             sklow = skhigh - 60 * 60 * 24 * 30
             
@@ -860,6 +886,28 @@ def process_group_responses(responses):
             data[group_name] = group
     return data
 
+def process_match_health_responses(responses_current, responses_month_ago, responses_last_year, sk_prefix):
+    if "error" in responses_current:
+        data = responses_current
+    else:
+        data = {}
+        data["current"] = []
+        data["last_month"] = []
+        data["last_year_month"] = []
+        data["current_maps"] = {}
+
+        for response in responses_current:
+            map = json.loads(response["data"])["map"]
+            data["current"].append(response["sk"].replace(sk_prefix,""))
+            data["current_maps"][map] = data["current_maps"].get(map,0) + 1
+        if "error" not in responses_month_ago:
+            for response in responses_month_ago:
+                data["last_month"].append(response["sk"].replace(sk_prefix,""))
+        if "error" not in responses_last_year:
+            for response in responses_last_year:
+                data["last_year_month"].append(response["sk"].replace(sk_prefix,""))
+    return data
+
 def process_player_response(response):
     data = {}
     data["elos"] = {}
@@ -1006,6 +1054,13 @@ if __name__ == "__main__":
     {
     "resource": "/matches/{proxy+}",
     "pathParameters": {"proxy": "recent/100"}
+    }
+    '''
+
+    event_str_matches_health = '''
+    {
+    "resource": "/matches/{proxy+}",
+    "pathParameters": {"proxy": "health/na/6"}
     }
     '''
     
@@ -1162,5 +1217,5 @@ if __name__ == "__main__":
     }
     '''
  
-    event = json.loads(event_str_leader)
+    event = json.loads(event_str_matches_health)
     print(handler(event, None)['body'])
