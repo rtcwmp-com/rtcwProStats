@@ -3,6 +3,7 @@ import logging
 import json
 import os
 import urllib3
+import urllib.parse
 
 # for local testing use actual table
 # for lambda execution runtime use dynamic reference
@@ -133,8 +134,9 @@ def build_new_user_payload(event):
 def build_new_group_payload(event):
     """Create a message about a new group."""
     group_name = event["detail"]["group_name"]
+    link = "https://stats.rtcwpro.com/groups/" + urllib.parse.quote(group_name)
     discord_message = "New group had been created - **" + group_name + "**\n" + \
-        f"Link: [https://stats.rtcwpro.com/groups/{group_name}](https://stats.rtcwpro.com/groups/{group_name})"
+        f"Link: [{group_name}]({link})"
 
     payload = {
         "embeds": [
