@@ -6,6 +6,7 @@ import aws_cdk.aws_apigateway as apigw
 import aws_cdk.aws_iam as iam
 import aws_cdk.aws_certificatemanager as acm
 import aws_cdk.aws_s3 as s3
+import aws_cdk.aws_logs as logs
 
 
 class APIStack(Stack):
@@ -46,6 +47,7 @@ class APIStack(Stack):
 
         cert = acm.Certificate.from_certificate_arn(self, "Certificate", cert_arn)
 
+        log_group = logs.LogGroup(self, "rtcwproLogGroup", log_group_name="RCTWProApiLogs", retention=logs.RetentionDays.THREE_MONTHS)
         api = apigw.RestApi(self, "rtcwpro",
                             domain_name={
                                 "domain_name": "rtcwproapi.donkanator.com",
@@ -54,16 +56,18 @@ class APIStack(Stack):
                             default_cors_preflight_options={
                                 "allow_origins": apigw.Cors.ALL_ORIGINS,
                                 "allow_methods": apigw.Cors.ALL_METHODS
-                                }
-# ==============cache infra costs money $0.4 a day=============================
-#                             ,
-#                             deploy_options = {
+                                },
+                            deploy_options = apigw.StageOptions(
+                                logging_level=apigw.MethodLoggingLevel.INFO,
+                                data_trace_enabled=False,
+                                access_log_destination=apigw.LogGroupLogDestination(log_group),
+                                access_log_format=apigw.AccessLogFormat.clf()
+                                # ==============cache infra costs money $0.4 a day=============================
 #                                     "cache_cluster_size": "0.5",
 #                                     "caching_enabled": True,
 #                                     "cache_ttl": core.Duration.minutes(1),
 #                                     "cache_data_encrypted": False
-#                                     }
-# =============================================================================
+                                )
                             )
 
         submit = api.root.add_resource("submit")

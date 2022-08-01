@@ -70,6 +70,9 @@ class DeliveryStack(Stack):
         
         player_info = player.add_resource("{player_guid}")
         player_info.add_method("GET", retriever_integration)
+
+        player_info_season= player_info.add_resource("season").add_resource("{season_id}")
+        player_info_season.add_method("GET", retriever_integration)
         
         #20
         player_search = player.add_resource("search")

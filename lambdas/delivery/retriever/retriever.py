@@ -394,15 +394,25 @@ def handler(event, context):
             else:
                 data = response
 
-    if api_path == "/player/{player_guid}":
+    if api_path == "/player/{player_guid}" or api_path == "/player/{player_guid}/season/{season_id}":
         logger.info("Processing " + api_path)
         if "player_guid" in event["pathParameters"]:
             player_guid = event["pathParameters"]["player_guid"]
             logger.info("Parameter: " + player_guid)
 
-            pk = "player" + "#" + player_guid
+            if api_path == "/player/{player_guid}":
+                pk = "player" + "#" + player_guid
+                pk_fake = "nothing"
+
+            if api_path == "/player/{player_guid}/season/{season_id}":
+                season_id = event["pathParameters"]["season_id"]
+                pk = "player" + "#" + player_guid
+                pk_fake = "player#" + player_guid + "#season#" + season_id
+
             response = get_items_pk(pk, ddb_table, log_stream_name)
             data = process_player_response(response)
+            data["pk_fake"] = pk_fake
+
             
     if api_path == "/leaders/{category}/region/{region}/type/{type}" or api_path == "/leaders/{category}/region/{region}/type/{type}/limit/{limit}":
         logger.info("Processing " + api_path)
