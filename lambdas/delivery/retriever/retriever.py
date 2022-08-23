@@ -64,7 +64,7 @@ def handler(event, context):
                         match_data["match_round_id"] = response["sk"]
                         data.append(match_data)
                 else:
-                    data = response
+                    data = responses
             elif path_tokens[0] == "server" and len(path_tokens) > 1:
                 pk_name = "gsi1pk"
                 pk="match"
