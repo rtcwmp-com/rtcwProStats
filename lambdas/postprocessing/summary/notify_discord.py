@@ -14,6 +14,7 @@ def post_custom_bus_event(event_client, events):
             response = event_client.put_events(Entries=events)
         else:
             logger.info("No events to submit.")
+            return
     except Exception as ex:
         template = "An exception of type {0} occurred. Arguments:\n{1!r}"
         error_msg = template.format(type(ex).__name__, ex.args)

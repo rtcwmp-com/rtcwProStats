@@ -18,7 +18,7 @@ def process_rtcwpro_summary(ddb_table, ddb_client, event_client, match_id, log_s
     t1 = _time.time()
     sk = match_id
     message = ""
-    
+
     response = get_item("statsall", sk, ddb_table, log_stream_name)
     if "error" not in response:
         stats = json.loads(response["data"])
@@ -55,6 +55,7 @@ def process_rtcwpro_summary(ddb_table, ddb_client, event_client, match_id, log_s
     
     stats_old = {}
     real_names = {}
+    player_games = {}
     wstats_old = {}
 
     if "error" not in response:
@@ -64,6 +65,7 @@ def process_rtcwpro_summary(ddb_table, ddb_client, event_client, match_id, log_s
             if "data" in result:
                 if "aggstats" in result["sk"]:
                     stats_old[guid] = result["data"]
+                    player_games[guid] = int(result["games"])
                 if result["sk"] == "realname":
                     real_names[guid] = result["data"]
                 if "aggwstats" in result["sk"]:
@@ -127,7 +129,7 @@ def process_rtcwpro_summary(ddb_table, ddb_client, event_client, match_id, log_s
             achievement_code = achievement_item["sk"].split("#")[1]
             achievements_old[guid + "#" + achievement_code] = float(achievement_item["gsi1sk"])
     
-    achievement_items = ddb_prepare_achievement_items(potential_achievements, achievements_old, real_names, match_region_type, match_id)
+    achievement_items = ddb_prepare_achievement_items(potential_achievements, achievements_old, real_names, player_games, match_region_type, match_id)
 
     # submit updated summaries
     items = []
@@ -179,14 +181,20 @@ def announce_new_achievements(achievement_items, match_region_type, CUSTOM_BUS):
 
     achievements = {}
     for achievement in achievement_items:
-        achievements_key = achievement['real_name'] + "#" + achievement['sk'].split("#")[1]
-        achievements_value = int(achievement['gsi1sk'])
-        achievements[achievements_key] = achievements_value
+        if 'gsi2sk' in achievement:  # only announce achievements for people with xx games
+            achievements_key = achievement['real_name'] + "#" + achievement['sk'].split("#")[1]
+            achievements_value = int(achievement['gsi1sk'])
+            achievements[achievements_key] = achievements_value
+
+
     tmp_event = event_template.copy()
     tmp_event["Detail"] = json.dumps({"notification_type": "new achievements",
                                       "achievements": achievements,
                                       "match_type": match_region_type})
-    events.append(tmp_event)
+
+    # it's always 1 event with multiple achievements inside, so don't make it if achievements is empty
+    if len(achievements) > 0:
+        events.append(tmp_event)
     return events
 
 def convert_stats_to_dict(stats):
@@ -310,7 +318,7 @@ def get_batch_items(item_list, ddb_table, log_stream_name):
     dynamodb = boto3.resource('dynamodb')
     item_info = "get_batch_items. Logstream: " + log_stream_name
     try:
-        response = dynamodb.batch_get_item(RequestItems={ddb_table.name: {'Keys': item_list, 'ProjectionExpression': 'pk, sk, #data_value, gsi1sk', 'ExpressionAttributeNames': {'#data_value': 'data'}}})
+        response = dynamodb.batch_get_item(RequestItems={ddb_table.name: {'Keys': item_list, 'ProjectionExpression': 'pk, sk, #data_value, gsi1sk, games', 'ExpressionAttributeNames': {'#data_value': 'data'}}})
     except ClientError as e:
         logger.warning("Exception occurred: " + e.response['Error']['Message'])
         result = make_error_dict("[x] Client error calling database: ", item_info)
@@ -387,7 +395,7 @@ def ddb_prepare_stat_item(stat_type, guid, match_region_type, player_stat, real_
         }
     return item
 
-def ddb_prepare_achievement_items(potential_achievements, achievements_old, real_names, match_region_type, match_id):
+def ddb_prepare_achievement_items(potential_achievements, achievements_old, real_names, player_games, match_region_type, match_id):
     """Figure out which potential achievements will make the cut and cast them to dynamodb format."""
     items = []
     ts = datetime.now().isoformat()
@@ -400,13 +408,16 @@ def ddb_prepare_achievement_items(potential_achievements, achievements_old, real
                     'lsipk'         : "achievement#" + ts,
                     'gsi1pk'        : "leader#" + achievement + "#" + match_region_type,
                     'gsi1sk'        : str(player_value).zfill(6),
-                    'gsi2pk'        : "event",
-                    'gsi2sk'        : ts,
-                    'eventtype'     : 'New player achievement',
-                    'eventdesc'     : achievement + "#" + str(player_value).zfill(6) + "#" + match_region_type + "#" + real_names.get(guid, "no_name"),
                     "real_name"     : real_names.get(guid, "no_name#"),
                     "match_id"      : match_id
                 }
+                #only mark achievements for players with > 40 games
+                if int(player_games.get(guid, 0)) > 40:
+                    print(guid + " had " + str(player_games.get(guid, 0) + " "))
+                    item['gsi2pk'] = "event"
+                    item['gsi2sk'] = ts
+                    item['eventtype'] = 'New player achievement'
+                    item['eventdesc'] = achievement + "#" + str(player_value).zfill(6) + "#" + match_region_type + "#" + real_names.get(guid, "no_name")
                 items.append(item)
     return items
 
