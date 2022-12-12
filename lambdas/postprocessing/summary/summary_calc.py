@@ -413,11 +413,13 @@ def ddb_prepare_achievement_items(potential_achievements, achievements_old, real
                 }
                 #only mark achievements for players with > 40 games
                 if int(player_games.get(guid, 0)) > 40:
-                    print(guid + " had " + str(player_games.get(guid, 0) + " "))
+                    print(guid + " had enough " + str(player_games.get(guid, 0) + " games"))
                     item['gsi2pk'] = "event"
                     item['gsi2sk'] = ts
                     item['eventtype'] = 'New player achievement'
                     item['eventdesc'] = achievement + "#" + str(player_value).zfill(6) + "#" + match_region_type + "#" + real_names.get(guid, "no_name")
+                else:
+                    print(guid + " had not enough" + str(player_games.get(guid, 0) + " games"))
                 items.append(item)
     return items
 
