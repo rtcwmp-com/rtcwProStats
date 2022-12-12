@@ -14,7 +14,7 @@ if __name__ == "__main__":
     TABLE_NAME = "rtcwprostats-database-DDBTable2F2A2F95-1BCIOU7IE3DSE"
 else:
     TABLE_NAME = os.environ['RTCWPROSTATS_TABLE_NAME']
-    
+
 dynamodb = boto3.resource('dynamodb')
 ddb_table = dynamodb.Table(TABLE_NAME)
 
@@ -41,7 +41,7 @@ def handler(event, context):
             path = event["pathParameters"]["proxy"]
             logger.info("Proxy path " + path)
             path_tokens = path.split("/")
-            if path_tokens[0].isnumeric() or len(path_tokens[0].split(','))>1:
+            if path_tokens[0].isnumeric() or len(path_tokens[0].split(',')) > 1:
                 matches = path_tokens[0].split(",")
                 item_list = []
                 match_dups = []
@@ -52,7 +52,7 @@ def handler(event, context):
                             continue
                         item_list.append({"pk": "match", "sk": match})
                         match_dups.append(match)
-                        
+
                 responses = get_batch_items(item_list, ddb_table, log_stream_name)
                 # logic specific to /matches/{[match_id]}
                 if "error" not in responses:
@@ -67,7 +67,7 @@ def handler(event, context):
                     data = responses
             elif path_tokens[0] == "server" and len(path_tokens) > 1:
                 pk_name = "gsi1pk"
-                pk="match"
+                pk = "match"
                 begins_with = urllib.parse.unquote(path_tokens[1])
                 logger.info("Searching for matches from server " + begins_with)
                 index_name = "gsi1"
@@ -75,14 +75,15 @@ def handler(event, context):
                 limit = 100
                 acending = False
                 projections = "data, lsipk, sk"
-                responses = get_begins(pk_name, pk, begins_with, ddb_table, index_name, skname, projections, log_stream_name, limit, acending)
+                responses = get_begins(pk_name, pk, begins_with, ddb_table, index_name, skname, projections,
+                                       log_stream_name, limit, acending)
 
                 # logic specific to /matches/recent/{days}
                 if "error" not in responses:
                     data = []
                     for line in responses:
                         tmp_data = json.loads(line["data"])
-                        match_type_tokens = line.get('lsipk',"##").split("#")
+                        match_type_tokens = line.get('lsipk', "##").split("#")
                         tmp_data["type"] = "#".join(match_type_tokens[0:2])
                         tmp_data["match_round_id"] = line["sk"]
                         data.append(tmp_data)
@@ -94,32 +95,33 @@ def handler(event, context):
                 if len(path_tokens) == 1:
                     error_msg = make_error_dict("Missing region and gametype", "")
                 if len(path_tokens) >= 2:
-                    if path_tokens[1].lower() in ['na','sa','eu','unk']:
+                    if path_tokens[1].lower() in ['na', 'sa', 'eu', 'unk']:
                         region = path_tokens[1].lower()
                     else:
                         error_msg = make_error_dict("Invalid region", "")
                 if len(path_tokens) == 3:
-                    if path_tokens[2].lower() in ['3','6','6plus']:
+                    if path_tokens[2].lower() in ['3', '6', '6plus']:
                         teams = path_tokens[2].lower()
                     else:
                         error_msg = make_error_dict("Invalid match type", "")
                 else:
                     teams = '6'
-                    
+
                 if error_msg:
                     data = error_msg
                 else:
                     match_type = region + "#" + teams + "#"
                     logger.info("Processing match type " + match_type)
-                    
+
                     pk = "match"
                     pk_name = "pk"
                     index_name = "lsi"
-                    skname="lsipk"
+                    skname = "lsipk"
                     begins_with = match_type
                     projections = "data, lsipk, sk"
-                    responses = get_begins(pk_name, pk, begins_with, ddb_table, index_name, skname, projections, log_stream_name, 100, False)
-                    
+                    responses = get_begins(pk_name, pk, begins_with, ddb_table, index_name, skname, projections,
+                                           log_stream_name, 100, False)
+
                     # logic specific to /matches/type/...
                     if "error" not in responses:
                         data = []
@@ -131,7 +133,7 @@ def handler(event, context):
                             data.append(tmp_data)
                     else:
                         data = responses
-                    
+
             elif path_tokens[0] == "recent":
                 if len(path_tokens) == 1:
                     days = 30
@@ -163,26 +165,31 @@ def handler(event, context):
                 limit = 600
                 region = path_tokens[1]
                 game_type = path_tokens[2]
-                if game_type.lower() not in ['3','6','6plus']:
+                if game_type.lower() not in ['3', '6', '6plus']:
                     game_type = '6'
-                if region.lower() not in ['na','sa','eu','unk']:
+                if region.lower() not in ['na', 'sa', 'eu', 'unk']:
                     region = 'na'
-                sk_prefix = region + "#" +  game_type + "#"
+                sk_prefix = region + "#" + game_type + "#"
                 logger.info("Health prefix : " + sk_prefix)
 
                 skhigh = int(time.time())
-                sklow = skhigh - 60 * 60 * 24 * 28  #get last 28 days for day-of-week consistency
-                responses_current = get_range("lsi", pk, sk_prefix + str(sklow), sk_prefix + str(skhigh), ddb_table, log_stream_name, limit, False)
+                sklow = skhigh - 60 * 60 * 24 * 28  # get last 28 days for day-of-week consistency
+                responses_current = get_range("lsi", pk, sk_prefix + str(sklow), sk_prefix + str(skhigh), ddb_table,
+                                              log_stream_name, limit, False)
 
                 skhigh = int(time.time()) - 60 * 60 * 24 * 7 * 5
                 sklow = int(time.time()) - 60 * 60 * 24 * 7 * 9  # get 28 days 35 days ago for day-of-week consistency
-                responses_month_ago = get_range("lsi", pk, sk_prefix + str(sklow), sk_prefix + str(skhigh), ddb_table, log_stream_name, limit, False)
+                responses_month_ago = get_range("lsi", pk, sk_prefix + str(sklow), sk_prefix + str(skhigh), ddb_table,
+                                                log_stream_name, limit, False)
 
                 skhigh = int(time.time()) - 60 * 60 * 24 * 7 * 52
-                sklow = int(time.time()) - 60 * 60 * 24 * 7 * 56  #get last 28 days exactly a year ago for day-of-week consistency. Predend leap year is not a thing.
-                responses_last_year = get_range("lsi", pk, sk_prefix + str(sklow), sk_prefix + str(skhigh), ddb_table, log_stream_name, limit, False)
+                sklow = int(
+                    time.time()) - 60 * 60 * 24 * 7 * 56  # get last 28 days exactly a year ago for day-of-week consistency. Predend leap year is not a thing.
+                responses_last_year = get_range("lsi", pk, sk_prefix + str(sklow), sk_prefix + str(skhigh), ddb_table,
+                                                log_stream_name, limit, False)
 
-                data = process_match_health_responses(responses_current, responses_month_ago, responses_last_year, sk_prefix)
+                data = process_match_health_responses(responses_current, responses_month_ago, responses_last_year,
+                                                      sk_prefix)
 
     if api_path == "/stats/player/{player_guid}" or api_path == "/stats/player/{player_guid}/region/{region}/type/{type}":
         logger.info("Processing " + api_path)
@@ -190,7 +197,7 @@ def handler(event, context):
             guid = event["pathParameters"]["player_guid"]
             skhigh = int(time.time())
             sklow = skhigh - 60 * 60 * 24 * 30
-            
+
             if api_path == "/stats/player/{player_guid}/region/{region}/type/{type}":
                 region = event["pathParameters"]["region"]
                 type_ = event["pathParameters"]["type"]
@@ -211,7 +218,7 @@ def handler(event, context):
                     data_line["type"] = line["gsi1pk"].replace("stats#", "")
                     data.append(data_line)
             elif "Items do not exist" in responses["error"]:
-                data = [] #taking a risk assuming the player simply did not play for 30 days
+                data = []  # taking a risk assuming the player simply did not play for 30 days
             else:
                 data = responses
 
@@ -220,21 +227,21 @@ def handler(event, context):
         if "match_id" in event["pathParameters"]:
             match_id = event["pathParameters"]["match_id"]
             logger.info("Parameter: " + match_id)
-            
-            if match_id.isnumeric(): 
-                
+
+            if match_id.isnumeric():
+
                 item_list = []
                 item_list.append({"pk": "statsall", "sk": match_id})
                 item_list.append({"pk": "match", "sk": match_id + "1"})
                 item_list.append({"pk": "match", "sk": match_id + "2"})
                 responses = get_batch_items(item_list, ddb_table, log_stream_name)
-                    
+
                 # logic specific to /stats/{match_id}
                 if "error" in responses:
                     data = responses
                 else:
                     data = {}
-                    match_dict= {}
+                    match_dict = {}
                     for response in responses:
                         if response["pk"] == "statsall":
                             data["statsall"] = json.loads(response["data"])
@@ -242,16 +249,14 @@ def handler(event, context):
                             data["type"] = response["gsi1pk"].replace("statsall#", "")
                         if response["pk"] == "match":
                             match_dict[response["sk"]] = json.loads(response["data"])
-                    
+
                     new_total_stats = {}
                     new_total_stats[match_id] = convert_stats_to_dict(data["statsall"])
-                        
+
                     teamA, teamB, aliases, team_mapping, alias_team_str = build_teams(new_total_stats)
                     match_summary = build_new_match_summary(match_dict, team_mapping)
                     data["match_summary"] = match_summary
-                        
 
-                    
             # if len(match_id.split(','))>1:
             #     matches = match_id.split(",")
             #     item_list = []
@@ -263,9 +268,9 @@ def handler(event, context):
             #                 continue
             #             item_list.append({"pk": "statsall", "sk": match})
             #             match_dups.append(match)
-                        
+
             #     responses = get_batch_items(item_list, ddb_table, log_stream_name)
-                
+
             #     # logic specific to /stats/{match_id} with match array
             #     if "error" not in responses:
             #         data = []
@@ -276,13 +281,12 @@ def handler(event, context):
             #             data.append(data_line)
             #     else:
             #         data = responses
-                    
-                    
+
     if api_path == "/stats/group/{group_name}":
         logger.info("Processing " + api_path)
         group_name = urllib.parse.unquote(event["pathParameters"]["group_name"])
         logger.info("Parameter: " + group_name)
-                
+
         pk = "groupcache#stats"
         sk = group_name
         response = get_item(pk, sk, ddb_table, log_stream_name)
@@ -292,7 +296,7 @@ def handler(event, context):
             data = json.loads(response["data"])
         else:
             data = response
-            
+
         pk = "groupawards"
         sk = group_name
         award_response = get_item(pk, sk, ddb_table, log_stream_name)
@@ -301,15 +305,14 @@ def handler(event, context):
             if "top_feuds" in award_response:
                 data["top_feuds"] = award_response["top_feuds"]
         else:
-            data["awards"] = {"error" : "Award cache was not found in database."}
+            data["awards"] = {"error": "Award cache was not found in database."}
             logger.error(award_response["error"])
-            
-            
+
     if api_path == "/wstats/group/{group_name}":
         logger.info("Processing " + api_path)
         group_name = urllib.parse.unquote(event["pathParameters"]["group_name"])
         logger.info("Parameter: " + group_name)
-        
+
         pk = "groupcache#wstats"
         sk = group_name
         response = get_item(pk, sk, ddb_table, log_stream_name)
@@ -340,7 +343,7 @@ def handler(event, context):
                     # data_line["type"] = line["gsi1pk"].replace("wstats#","")
                     data.append(data_line)
             elif "Items do not exist" in responses["error"]:
-                data = [] #taking a risk assuming the player simply did not play for 30 days
+                data = []  # taking a risk assuming the player simply did not play for 30 days
             else:
                 data = responses
 
@@ -395,10 +398,14 @@ def handler(event, context):
                 data = response
 
     if api_path == "/player/{player_guid}" or api_path == "/player/{player_guid}/season/{season_id}":
+        skoal = ['0746b934fe74063ca9f9c3c4be504590', '4a91611dcf6771487449f1e100d2a295']
         logger.info("Processing " + api_path)
         if "player_guid" in event["pathParameters"]:
             player_guid = event["pathParameters"]["player_guid"]
             logger.info("Parameter: " + player_guid)
+            if player_guid in skoal:
+                player_guid = "22b0e88467093a63d5dd979eec2631d1"
+                logger.info("Guid replaced due to being on skoal")
 
             if api_path == "/player/{player_guid}":
                 pk = "player" + "#" + player_guid
@@ -413,19 +420,18 @@ def handler(event, context):
             data = process_player_response(response)
             data["pk_fake"] = pk_fake
 
-            
     if api_path == "/leaders/{category}/region/{region}/type/{type}" or api_path == "/leaders/{category}/region/{region}/type/{type}/limit/{limit}":
         logger.info("Processing " + api_path)
 
         category = urllib.parse.unquote(event["pathParameters"]["category"])
         region = event["pathParameters"]["region"]
         type_ = event["pathParameters"]["type"]
-        
+
         if api_path == "/leaders/{category}/region/{region}/type/{type}/limit/{limit}":
             limit = int(event["pathParameters"]["limit"])
         else:
             limit = 50
-            
+
         logger.info("Parameters: " + category + " " + region + " " + type_)
 
         projection = "pk, gsi1sk, real_name, match_id"
@@ -437,10 +443,10 @@ def handler(event, context):
         else:
             pk = "leader" + category + "#" + region + "#" + type_
             projection += ", games"
-        
+
         response = get_leaders(pk, ddb_table, projection, limit, only_recent, log_stream_name)
         data = process_leader_response(response)
-    
+
     if api_path == "/eloprogress/player/{player_guid}/region/{region}/type/{type}":
         logger.info("Processing " + api_path)
 
@@ -448,37 +454,39 @@ def handler(event, context):
         region = event["pathParameters"]["region"]
         type_ = event["pathParameters"]["type"]
         limit = 100
-        
+
         logger.info("Parameters: " + player_guid + " " + region + " " + type_)
-        
+
         pk_name = "pk"
         pk = "eloprogress#" + player_guid
         index_name = None
-        skname="sk"
+        skname = "sk"
         begins_with = region + "#" + type_ + "#"
         ascending = False
         projections = "data, gsi1sk, elo, performance_score, real_name"
-        response = get_begins(pk_name, pk, begins_with, ddb_table, index_name, skname, projections, log_stream_name, limit, ascending)  
+        response = get_begins(pk_name, pk, begins_with, ddb_table, index_name, skname, projections, log_stream_name,
+                              limit, ascending)
         data = process_eloprogress_response(response)
-    
+
     if api_path == "/eloprogress/match/{match_id}":
         logger.info("Processing " + api_path)
 
         match_id = event["pathParameters"]["match_id"]
         limit = 20  # how many people can there be?
-        
+
         logger.info("Parameters: " + match_id)
-        
+
         pk_name = "gsi1pk"
         pk = "eloprogressmatch"
         index_name = "gsi1"
-        skname="gsi1sk"
+        skname = "gsi1sk"
         begins_with = match_id
         ascending = False
         projections = "data, gsi1sk, elo, performance_score, real_name"
-        response = get_begins(pk_name, pk, begins_with, ddb_table, index_name, skname, projections, log_stream_name, limit, ascending)  
+        response = get_begins(pk_name, pk, begins_with, ddb_table, index_name, skname, projections, log_stream_name,
+                              limit, ascending)
         data = process_eloprogress_response(response)
-                
+
     if api_path == "/player/search/{begins_with}":
         logger.info("Processing " + api_path)
         if "begins_with" in event["pathParameters"]:
@@ -487,23 +495,23 @@ def handler(event, context):
             pk_name = "gsi1pk"
             pk = "realname"
             index_name = "gsi1"
-            skname="gsi1sk"
+            skname = "gsi1sk"
             projections = "data, pk, updated"
-            responses = get_begins(pk_name, pk, begins_with, ddb_table, index_name, skname, projections, log_stream_name, 100, True)
+            responses = get_begins(pk_name, pk, begins_with, ddb_table, index_name, skname, projections,
+                                   log_stream_name, 100, True)
 
             if "error" not in responses:
                 # logic specific to /player/search/{begins_with}
                 data = []
                 for player in responses:
                     data_line = {}
-                    data_line["real_name"] = player.get("data","na")
+                    data_line["real_name"] = player.get("data", "na")
                     data_line["guid"] = player["pk"].split("#")[1]
-                    data_line["last_seen"] = player.get("updated","2021-07-31T22:21:34.211247")
+                    data_line["last_seen"] = player.get("updated", "2021-07-31T22:21:34.211247")
                     data.append(data_line)
             else:
                 data = responses
-                
-                
+
     if api_path == "/aliases/search/{begins_with}":
         logger.info("Processing " + api_path)
 
@@ -512,12 +520,12 @@ def handler(event, context):
         pk_name = "gsi1pk"
         pk = "aliassearch2"
         index_name = "gsi1"
-        skname="gsi1sk"
+        skname = "gsi1sk"
         projections = "sk, gsi1sk, last_seen, lsipk, real_name"
-        responses = get_begins(pk_name, pk, begins_with, ddb_table, index_name, skname, projections, log_stream_name, 40, True)
+        responses = get_begins(pk_name, pk, begins_with, ddb_table, index_name, skname, projections, log_stream_name,
+                               40, True)
         data = process_alias_responses(api_path, responses)
-        
-            
+
     if api_path == "/aliases/player/{player_guid}":
         logger.info("Processing " + api_path)
 
@@ -526,14 +534,15 @@ def handler(event, context):
         pk_name = "pk"
         pk = "aliases"
         index_name = None
-        skname="sk"
+        skname = "sk"
         begins_with = player_guid + "#"
         limit = 40
         ascending = False
         projections = "sk, gsi1sk, last_seen, lsipk, real_name"
-        responses = get_begins(pk_name, pk, begins_with, ddb_table, index_name, skname, projections, log_stream_name, limit, ascending)  
+        responses = get_begins(pk_name, pk, begins_with, ddb_table, index_name, skname, projections, log_stream_name,
+                               limit, ascending)
         data = process_alias_responses(api_path, responses)
-    
+
     if api_path == "/aliases/recent/limit/{limit}":
         logger.info("Processing " + api_path)
 
@@ -542,26 +551,27 @@ def handler(event, context):
         pk_name = "pk"
         pk = "aliases"
         index_name = "lsi"
-        skname="lsipk"
+        skname = "lsipk"
         begins_with = "1"  # TODO!!!!
-        
+
         limit = 30
         if limit_str.isdigit():
-            limit = min(int(limit_str),101)
-            
+            limit = min(int(limit_str), 101)
+
         ascending = False
         projections = "sk, gsi1sk, last_seen, lsipk, real_name"
-        responses = get_begins(pk_name, pk, begins_with, ddb_table, index_name, skname, projections, log_stream_name, limit, ascending)  
+        responses = get_begins(pk_name, pk, begins_with, ddb_table, index_name, skname, projections, log_stream_name,
+                               limit, ascending)
         data = process_alias_responses(api_path, responses)
-                
+
     if api_path == "/servers" or api_path == "/servers/detail":
         logger.info("Processing " + api_path)
         pk_name = "pk"
         pk = "server"
-        limit =200
+        limit = 200
         responses = get_query_all(pk_name, pk, ddb_table, log_stream_name, limit)
         data = process_server_responses(api_path, responses)
-    
+
     if api_path == "/events/{limit}":
         logger.info("Processing " + api_path)
 
@@ -570,16 +580,17 @@ def handler(event, context):
         pk_name = "gsi2pk"
         pk = "event"
         index_name = "gsi2"
-        skname="gsi2sk"
+        skname = "gsi2sk"
         projections = "eventtype,eventdesc, gsi2sk"
         limit = 100
         if limit_str.isdigit():
-            limit = min(int(limit_str),limit)
+            limit = min(int(limit_str), limit)
         ascending = False
         begins_with = "2"  # fix by year 3000
-        responses = get_begins(pk_name, pk, begins_with, ddb_table, index_name, skname, projections, log_stream_name, limit, ascending)  
+        responses = get_begins(pk_name, pk, begins_with, ddb_table, index_name, skname, projections, log_stream_name,
+                               limit, ascending)
         data = process_event_responses(api_path, responses)
-    
+
     if api_path == "/servers/region/{region}" or api_path == "/servers/region/{region}/active":
         logger.info("Processing " + api_path)
         region = event["pathParameters"]["region"]
@@ -587,15 +598,16 @@ def handler(event, context):
         pk_name = "pk"
         pk = "server"
         index_name = "lsi"
-        skname="lsipk"
+        skname = "lsipk"
         limit = 200
         ascending = False
-             
+
         if api_path == "/servers/region/{region}":
             begins_with = region
             projections = "sk, region, lsipk, submissions, data"
-            responses = get_begins(pk_name, pk, begins_with, ddb_table, index_name, skname, projections, log_stream_name, limit, ascending)
-        
+            responses = get_begins(pk_name, pk, begins_with, ddb_table, index_name, skname, projections,
+                                   log_stream_name, limit, ascending)
+
         if api_path == "/servers/region/{region}/active":
             dt = datetime.datetime.now() - datetime.timedelta(days=30)
             dt_str = dt.strftime("%Y-%m-%d %H:%M:%S")
@@ -604,29 +616,30 @@ def handler(event, context):
             responses = get_range(index_name, pk, str(sklow), str(skhigh), ddb_table, log_stream_name, limit, ascending)
 
         data = process_server_responses(api_path, responses)
-    
+
     # if api_path == "/groups/add":
-        # this functionality is in delivery_writer.py
+    # this functionality is in delivery_writer.py
 
     if api_path == "/groups/{proxy+}":
         # data = event
-        path = event.get("pathParameters",{}).get("proxy","")
+        path = event.get("pathParameters", {}).get("proxy", "")
         logger.info("Proxy path " + path)
         path_tokens = path.split("/")
         data = {}
         projections = "sk, data, cached, teams, games, finish_human, duration_nice"
-        
-        if len(path_tokens) == 2 and path_tokens[0] == "group_name" and len(path_tokens[0].strip())>0:
+
+        if len(path_tokens) == 2 and path_tokens[0] == "group_name" and len(path_tokens[0].strip()) > 0:
             logger.info("Parameter: /groups/group_name/{group_name}")
             pk_name = "pk"
             pk = "group"
             index_name = None
-            skname="sk"
+            skname = "sk"
             begins_with = path_tokens[1]
-            ascending = True #next group with same id will overwrite the older one
-            responses = get_begins(pk_name, pk, begins_with, ddb_table, index_name, skname, projections, log_stream_name, 100, ascending)  
+            ascending = True  # next group with same id will overwrite the older one
+            responses = get_begins(pk_name, pk, begins_with, ddb_table, index_name, skname, projections,
+                                   log_stream_name, 100, ascending)
             data = process_group_responses(responses)
-                     
+
         # if len(path_tokens) == 2 and path_tokens[0] == "region" and path_tokens[1] in ["sa","na","eu","unk"]:
         #     logger.info("Parameter: /groups/region/{region_name}")
         #     pk_name = "pk"
@@ -637,44 +650,46 @@ def handler(event, context):
         #     ascending = False
         #     responses = get_begins(pk_name, pk, begins_with, ddb_table, index_name, skname, projections, log_stream_name, 100, ascending)  
         #     data = process_group_responses(responses)    
-        
-        if (len(path_tokens) == 4 and path_tokens[0] == "region" and path_tokens[1] in ["sa","na","eu","unk"] and 
-           path_tokens[2] == "type" and path_tokens[3] in ["3","6","6plus"]) :
+
+        if (len(path_tokens) == 4 and path_tokens[0] == "region" and path_tokens[1] in ["sa", "na", "eu", "unk"] and
+                path_tokens[2] == "type" and path_tokens[3] in ["3", "6", "6plus"]):
             logger.info("Parameter: /groups/region/{region_name}/type/{match_type}")
             pk_name = "gsi1pk"
             pk = "group"
             index_name = "gsi1"
-            skname="gsi1sk"
+            skname = "gsi1sk"
             begins_with = path_tokens[1] + "#" + path_tokens[3]
             ascending = False
-            responses = get_begins(pk_name, pk, begins_with, ddb_table, index_name, skname, projections, log_stream_name, 100, ascending)  
+            responses = get_begins(pk_name, pk, begins_with, ddb_table, index_name, skname, projections,
+                                   log_stream_name, 100, ascending)
             data = process_group_responses(responses)
-                
-        if (len(path_tokens) == 6 and path_tokens[0] == "region" and path_tokens[1] in ["sa","na","eu","unk"] and 
-           path_tokens[2] == "type" and path_tokens[3] in ["3","6","6plus"] and
-           path_tokens[4] == "group_name" and len(path_tokens[5].strip()) > 0 ):
+
+        if (len(path_tokens) == 6 and path_tokens[0] == "region" and path_tokens[1] in ["sa", "na", "eu", "unk"] and
+                path_tokens[2] == "type" and path_tokens[3] in ["3", "6", "6plus"] and
+                path_tokens[4] == "group_name" and len(path_tokens[5].strip()) > 0):
             logger.info("Parameter: /groups/region/{region_name}/type/{match_type}/group_name/{group_name}")
             pk_name = "pk"
             pk = "group"
             index_name = "lsi"
-            skname="lsipk"
+            skname = "lsipk"
             begins_with = path_tokens[1] + "#" + path_tokens[3] + "#" + path_tokens[5]
             ascending = False
-            responses = get_begins(pk_name, pk, begins_with, ddb_table, index_name, skname, projections, log_stream_name, 100, ascending)  
+            responses = get_begins(pk_name, pk, begins_with, ddb_table, index_name, skname, projections,
+                                   log_stream_name, 100, ascending)
             data = process_group_responses(responses)
-        
+
         if len(data) == 0:
             data = make_error_dict("Could not match path:", path)
-        
 
     return {
         'statusCode': 200,
         'headers': {
             'Content-Type': 'application/json',
             'Access-Control-Allow-Origin': '*'
-            },
+        },
         'body': json.dumps(data, default=default_type_error_handler)
-        }
+    }
+
 
 # https://stackoverflow.com/questions/63278737/object-of-type-decimal-is-not-json-serializable
 def default_type_error_handler(obj):
@@ -700,11 +715,12 @@ def get_item(pk, sk, table, log_stream_name):
             result = make_error_dict("[x] Item does not exist: ", item_info)
     return result
 
+
 def get_items_pk(pk, table, log_stream_name):
     """Get several items by pk."""
     item_info = pk + " Logstream: " + log_stream_name
     try:
-        response = table.query(KeyConditionExpression=Key('pk').eq(pk), Limit=100,ReturnConsumedCapacity='NONE')
+        response = table.query(KeyConditionExpression=Key('pk').eq(pk), Limit=100, ReturnConsumedCapacity='NONE')
     except ClientError as e:
         logger.warning("Exception occurred: " + e.response['Error']['Message'])
         result = make_error_dict("[x] Client error calling database: ", item_info)
@@ -715,12 +731,13 @@ def get_items_pk(pk, table, log_stream_name):
             result = make_error_dict("[x] Items do not exist: ", item_info)
     return result
 
+
 def get_leaders(pk, table, projection, limit, only_recent, log_stream_name):
     """Get several items by pk."""
     item_info = pk + " Logstream: " + log_stream_name
 
     try:
-        response = {"Count" : 0}
+        response = {"Count": 0}
         if only_recent:
             dt = datetime.datetime.now() - datetime.timedelta(days=30)
             dt_str = dt.isoformat()
@@ -756,11 +773,16 @@ def get_range(index_name, pk, sklow, skhigh, table, log_stream_name, limit, asce
     item_info = pk + ":" + sklow + " to " + skhigh + ". Logstream: " + log_stream_name
     try:
         if index_name == "lsi":
-            response = table.query(IndexName=index_name, KeyConditionExpression=Key('pk').eq(pk) & Key("lsipk").between(sklow, skhigh), Limit=limit,ReturnConsumedCapacity='NONE', ScanIndexForward=ascending)
+            response = table.query(IndexName=index_name,
+                                   KeyConditionExpression=Key('pk').eq(pk) & Key("lsipk").between(sklow, skhigh),
+                                   Limit=limit, ReturnConsumedCapacity='NONE', ScanIndexForward=ascending)
         elif index_name == "gsi1":
-            response = table.query(IndexName=index_name, KeyConditionExpression=Key('gsi1pk').eq(pk) & Key("gsi1sk").between(sklow, skhigh), Limit=limit,ReturnConsumedCapacity='NONE', ScanIndexForward=ascending)
+            response = table.query(IndexName=index_name,
+                                   KeyConditionExpression=Key('gsi1pk').eq(pk) & Key("gsi1sk").between(sklow, skhigh),
+                                   Limit=limit, ReturnConsumedCapacity='NONE', ScanIndexForward=ascending)
         else:
-            response = table.query(KeyConditionExpression=Key('pk').eq(pk) & Key('sk').between(sklow, skhigh), Limit=limit,ReturnConsumedCapacity='NONE', ScanIndexForward=ascending)
+            response = table.query(KeyConditionExpression=Key('pk').eq(pk) & Key('sk').between(sklow, skhigh),
+                                   Limit=limit, ReturnConsumedCapacity='NONE', ScanIndexForward=ascending)
     except ClientError as e:
         logger.warning("Exception occurred: " + e.response['Error']['Message'])
         result = make_error_dict("[x] Client error calling database: ", item_info)
@@ -771,28 +793,41 @@ def get_range(index_name, pk, sklow, skhigh, table, log_stream_name, limit, asce
             result = make_error_dict("[x] Items do not exist: ", item_info)
     return result
 
+
 def get_begins(pk_name, pk, begins_with, ddb_table, index_name, skname, projections, log_stream_name, limit, ascending):
     """Get several items by pk and range of sk."""
     item_info = pk + ": begins with " + begins_with + ". Logstream: " + log_stream_name
     projections = projections.replace("data", "#data_value").replace("region", "#region_value")
-    
-    expressionAttributeNames = {} # knee deep
+
+    expressionAttributeNames = {}  # knee deep
     if '#data_value' in projections:
         expressionAttributeNames['#data_value'] = 'data'
     if '#region_value' in projections:
         expressionAttributeNames['#region_value'] = 'region'
-        
+
     try:
         if index_name:
             if "_value" in projections:  # wish there was a way to not error over unuzed projection names
-                response = ddb_table.query(IndexName=index_name,KeyConditionExpression=Key(pk_name).eq(pk) & Key(skname).begins_with(begins_with), ProjectionExpression=projections, ExpressionAttributeNames=expressionAttributeNames, Limit=limit, ScanIndexForward=ascending)
+                response = ddb_table.query(IndexName=index_name,
+                                           KeyConditionExpression=Key(pk_name).eq(pk) & Key(skname).begins_with(
+                                               begins_with), ProjectionExpression=projections,
+                                           ExpressionAttributeNames=expressionAttributeNames, Limit=limit,
+                                           ScanIndexForward=ascending)
             else:
-                response = ddb_table.query(IndexName=index_name,KeyConditionExpression=Key(pk_name).eq(pk) & Key(skname).begins_with(begins_with), ProjectionExpression=projections, Limit=limit, ScanIndexForward=ascending)
+                response = ddb_table.query(IndexName=index_name,
+                                           KeyConditionExpression=Key(pk_name).eq(pk) & Key(skname).begins_with(
+                                               begins_with), ProjectionExpression=projections, Limit=limit,
+                                           ScanIndexForward=ascending)
         else:
             if "_value" in projections:
-                response = ddb_table.query(KeyConditionExpression=Key(pk_name).eq(pk) & Key(skname).begins_with(begins_with),ProjectionExpression=projections, ExpressionAttributeNames=expressionAttributeNames, Limit=limit, ScanIndexForward=ascending)
+                response = ddb_table.query(
+                    KeyConditionExpression=Key(pk_name).eq(pk) & Key(skname).begins_with(begins_with),
+                    ProjectionExpression=projections, ExpressionAttributeNames=expressionAttributeNames, Limit=limit,
+                    ScanIndexForward=ascending)
             else:
-                response = ddb_table.query(KeyConditionExpression=Key(pk_name).eq(pk) & Key(skname).begins_with(begins_with),ProjectionExpression=projections, Limit=limit, ScanIndexForward=ascending)
+                response = ddb_table.query(
+                    KeyConditionExpression=Key(pk_name).eq(pk) & Key(skname).begins_with(begins_with),
+                    ProjectionExpression=projections, Limit=limit, ScanIndexForward=ascending)
     except ClientError as e:
         logger.warning("Exception occurred: " + e.response['Error']['Message'])
         result = make_error_dict("[x] Client error calling database: ", item_info)
@@ -802,6 +837,7 @@ def get_begins(pk_name, pk, begins_with, ddb_table, index_name, skname, projecti
         else:
             result = make_error_dict("[x] Items do not exist: ", item_info)
     return result
+
 
 def get_query_all(pk_name, pk, ddb_table, log_stream_name, limit):
     """Get several items by pk."""
@@ -817,6 +853,7 @@ def get_query_all(pk_name, pk, ddb_table, log_stream_name, limit):
         else:
             result = make_error_dict("[x] Items do not exist: ", item_info)
     return result
+
 
 def get_batch_items(item_list, ddb_table, log_stream_name):
     """Get items in a batch."""
@@ -834,9 +871,11 @@ def get_batch_items(item_list, ddb_table, log_stream_name):
             result = make_error_dict("[x] Item does not exist: ", item_info)
     return result
 
+
 def make_error_dict(message, item_info):
     """Make an error message for API gateway."""
     return {"error": message + " " + item_info}
+
 
 def process_server_responses(api_path, responses):
     if "error" not in responses:
@@ -844,24 +883,25 @@ def process_server_responses(api_path, responses):
         data = []
         for server in responses:
             data_line = {}
-            
+
             data_line["server_name"] = server["sk"]
             data_line["region"] = server["region"]
-            if server["lsipk"].split("#")[0] ==  data_line["region"]:
+            if server["lsipk"].split("#")[0] == data_line["region"]:
                 data_line["last_submission"] = server["lsipk"].split("#")[1]
             else:
                 data_line["last_submission"] = '2021-07-31 23:59:59'
-            data_line["submissions"]=int(server["submissions"])
+            data_line["submissions"] = int(server["submissions"])
             server_ip = server["data"]['serverIP']
             if "80.201" in server_ip:
                 server_ip = "hidden"
             data_line["IP"] = server_ip
             if api_path == "/servers/detail":
-                data_line["data"]=server["data"]
+                data_line["data"] = server["data"]
             data.append(data_line)
     else:
         data = responses
     return data
+
 
 def process_event_responses(api_path, responses):
     if "error" not in responses:
@@ -869,32 +909,34 @@ def process_event_responses(api_path, responses):
         data = []
         for event in responses:
             data_line = {}
-            
+
             data_line["eventtype"] = event["eventtype"]
-            data_line["eventdesc"] = event.get("eventdesc","n#a")
+            data_line["eventdesc"] = event.get("eventdesc", "n#a")
             data_line["timestamp"] = event["gsi2sk"]
-            
+
             data.append(data_line)
     else:
         data = responses
     return data
 
+
 def process_group_responses(responses):
     if "error" in responses:
-        data = responses 
+        data = responses
     else:
         data = {}
-        for response in responses: #these should be sorted in order
+        for response in responses:  # these should be sorted in order
             group_name = response["sk"].split("#")[0]
             group = {}
             group["matches"] = json.loads(response["data"])
-            group["cached"] = response.get("cached","No")
-            group["teams"] = response.get("teams","A: player1, player2 B: player3, player4")
-            group["games"] = int(response.get("games",len(group["matches"])))
-            group["finish_human"] = response.get("finish_human","2021-07-31 23:59:59")
-            group["duration_nice"] = response.get("duration_nice","00:00")
+            group["cached"] = response.get("cached", "No")
+            group["teams"] = response.get("teams", "A: player1, player2 B: player3, player4")
+            group["games"] = int(response.get("games", len(group["matches"])))
+            group["finish_human"] = response.get("finish_human", "2021-07-31 23:59:59")
+            group["duration_nice"] = response.get("duration_nice", "00:00")
             data[group_name] = group
     return data
+
 
 def process_match_health_responses(responses_current, responses_month_ago, responses_last_year, sk_prefix):
     if "error" in responses_current:
@@ -908,15 +950,16 @@ def process_match_health_responses(responses_current, responses_month_ago, respo
 
         for response in responses_current:
             map = json.loads(response["data"])["map"]
-            data["current"].append(response["sk"].replace(sk_prefix,""))
-            data["current_maps"][map] = data["current_maps"].get(map,0) + 1
+            data["current"].append(response["sk"].replace(sk_prefix, ""))
+            data["current_maps"][map] = data["current_maps"].get(map, 0) + 1
         if "error" not in responses_month_ago:
             for response in responses_month_ago:
-                data["last_month"].append(response["sk"].replace(sk_prefix,""))
+                data["last_month"].append(response["sk"].replace(sk_prefix, ""))
         if "error" not in responses_last_year:
             for response in responses_last_year:
-                data["last_year_month"].append(response["sk"].replace(sk_prefix,""))
+                data["last_year_month"].append(response["sk"].replace(sk_prefix, ""))
     return data
+
 
 def process_player_response(response):
     data = {}
@@ -934,52 +977,58 @@ def process_player_response(response):
     else:
         try:
             for item in response:
-                if "elo#" in  item["sk"]:
-                    data["elos"][item["sk"].replace("elo#","")] = {}
-                    data["elos"][item["sk"].replace("elo#","")]["elo"] = int(item["data"])
-                    data["elos"][item["sk"].replace("elo#","")]["games"] = int(item["games"])
-                if "realname" in  item["sk"]:
+                if "elo#" in item["sk"]:
+                    data["elos"][item["sk"].replace("elo#", "")] = {}
+                    data["elos"][item["sk"].replace("elo#", "")]["elo"] = int(item["data"])
+                    data["elos"][item["sk"].replace("elo#", "")]["games"] = int(item["games"])
+                if "realname" in item["sk"]:
                     data["real_name"] = item["data"]
-                    data["last_seen"] = item.get("updated","2021-07-31T22:21:34.211247")
-                if "aggstats#" in  item["sk"]:
-                    data["aggstats"][item["sk"].replace("aggstats#","")] = item["data"]
-                    data["kdr"][item["gsi1pk"].replace("leaderkdr#","")] = float(item["gsi1sk"])
-                if "aggwstats#" in  item["sk"]:
-                    data["aggwstats"][item["sk"].replace("aggwstats#","")] = item["data"]
-                    data["acc"][item["gsi1pk"].replace("leaderacc#","")] = float(item["gsi1sk"])
-                if "achievement#" in  item["sk"]:
-                    data["achievements"][item["sk"].replace("achievement#","")] = float(item["gsi1sk"])
+                    data["last_seen"] = item.get("updated", "2021-07-31T22:21:34.211247")
+                if "aggstats#" in item["sk"]:
+                    data["aggstats"][item["sk"].replace("aggstats#", "")] = item["data"]
+                    data["kdr"][item["gsi1pk"].replace("leaderkdr#", "")] = float(item["gsi1sk"])
+                if "aggwstats#" in item["sk"]:
+                    data["aggwstats"][item["sk"].replace("aggwstats#", "")] = item["data"]
+                    data["acc"][item["gsi1pk"].replace("leaderacc#", "")] = float(item["gsi1sk"])
+                if "achievement#" in item["sk"]:
+                    data["achievements"][item["sk"].replace("achievement#", "")] = float(item["gsi1sk"])
         except:
             item_info = "unkown"
             if len(response) > 0:
                 if "pk" in response[0]:
-                   item_info = item["pk"]
+                    item_info = item["pk"]
             data["error"] = "Could not process player response for " + item_info
             logger.error(data["error"])
     return data
 
+
 def process_leader_response(response):
+    skoal = ['0746b934fe74063ca9f9c3c4be504590', '4a91611dcf6771487449f1e100d2a295']
     data = []
     if "error" in response:
         data = response
     else:
         try:
             for item in response:
-               leader_line = {}
-               leader_line['real_name'] = item.get("real_name","no_name#")
-               leader_line['value'] = float(item["gsi1sk"])
-               leader_line['guid'] = item["pk"].split("#")[1]
-               leader_line['games'] = int(item.get("games",-1))
-               leader_line['match_id'] = int(item.get("match_id",-1)) 
-               data.append(leader_line)
+                leader_line = {}
+                leader_line['real_name'] = item.get("real_name", "no_name#")
+                leader_line['value'] = float(item["gsi1sk"])
+                leader_line['guid'] = item["pk"].split("#")[1]
+                leader_line['games'] = int(item.get("games", -1))
+                leader_line['match_id'] = int(item.get("match_id", -1))
+                if leader_line['guid'] in skoal:
+                    logger.info(leader_line['guid'] + " is dropped due to skoal")
+                else:
+                    data.append(leader_line)
         except:
             item_info = "unkown"
             if len(response) > 0:
                 if "pk" in response[0]:
-                   item_info = item["pk"]
+                    item_info = item["pk"]
             data = make_error_dict("Could not process leader response.", item_info)
             logger.error(data["error"])
     return data
+
 
 def process_eloprogress_response(response):
     data = []
@@ -988,22 +1037,23 @@ def process_eloprogress_response(response):
     else:
         try:
             for item in response:
-               elo_delta = {}
-               # leader_line['updated'] = item["updated"]
-               elo_delta['value'] = int(item["data"])
-               elo_delta['elo'] = int(item["elo"])
-               elo_delta['match_id'] = int(item.get("gsi1sk",0)) 
-               elo_delta['real_name'] = item.get("real_name","no_name#")
-               data.append(elo_delta)
+                elo_delta = {}
+                # leader_line['updated'] = item["updated"]
+                elo_delta['value'] = int(item["data"])
+                elo_delta['elo'] = int(item["elo"])
+                elo_delta['match_id'] = int(item.get("gsi1sk", 0))
+                elo_delta['real_name'] = item.get("real_name", "no_name#")
+                data.append(elo_delta)
         except:
             item_info = "unkown"
             if len(response) > 0:
                 if "pk" in response[0]:
-                   item_info = item["pk"]
+                    item_info = item["pk"]
             data = make_error_dict("Could not process leader response.", item_info)
             logger.error(data["error"])
     return data
-    
+
+
 def process_alias_responses(api_path, responses):
     data = []
     if "error" in responses:
@@ -1012,16 +1062,15 @@ def process_alias_responses(api_path, responses):
         # logic specific to /aliases/*
         for player in responses:
             data_line = {}
-            
-            data_line["last_seen"] = player.get("last_seen","na")
-            data_line["real_name"] = player.get("real_name","na")
-            data_line["alias"] = player.get("gsi1sk","na")
+
+            data_line["last_seen"] = player.get("last_seen", "na")
+            data_line["real_name"] = player.get("real_name", "na")
+            data_line["alias"] = player.get("gsi1sk", "na")
             data_line["last_match"] = player["lsipk"].split("#")[0]
             data_line["guid"] = player["sk"].split("#")[0]
             data.append(data_line)
     return data
-                       
-        
+
 
 if __name__ == "__main__":
     event_str = '''
@@ -1032,7 +1081,7 @@ if __name__ == "__main__":
     },
     }
     '''
-    
+
     event_str_stats_player_region_type = '''
     {
     "resource": "/stats/player/{player_guid}/region/{region}/type/{type}",
@@ -1043,7 +1092,7 @@ if __name__ == "__main__":
     }
     }
     '''
-    
+
     # event_stats_csv = '''
     # {
     # "resource": "/stats/{match_id}",
@@ -1052,14 +1101,14 @@ if __name__ == "__main__":
     # },
     # }
     # '''
-    
+
     event_stats_one = '''
     {
     "resource": "/stats/{match_id}",
     "pathParameters": {"match_id": "1630476331"}
     }
     '''
-    
+
     event_str = '''
     {
     "resource": "/matches/{proxy+}",
@@ -1073,21 +1122,21 @@ if __name__ == "__main__":
     "pathParameters": {"proxy": "health/na/6"}
     }
     '''
-    
+
     event_str_player_search = '''
     {
     "resource": "/player/search/{begins_with}",
     "pathParameters": {"begins_with": "jam"}
     }
     '''
-    
+
     event_str_player_guid = '''
     {
     "resource": "/player/{player_guid}",
     "pathParameters": {"player_guid": "5379320f3c64f43cdaf3350fc13011ce" }
     }
     '''
-    
+
     event_str = '''
     {
      "resource":"/matches/{proxy+}",
@@ -1100,14 +1149,14 @@ if __name__ == "__main__":
      "pathParameters":{"proxy":"server/kekekke%20haha"}
     }
     '''
-    
+
     event_str_match_type = '''
     {
      "resource":"/matches/{proxy+}",
      "pathParameters":{"proxy":"type/na"}
     }
     '''
-    
+
     event_str_group_name = '''
     {
      "resource": "/groups/{proxy+}",
@@ -1116,7 +1165,7 @@ if __name__ == "__main__":
          }
      }
     '''
-    
+
     event_str_group_region = '''
     {
      "resource": "/groups/{proxy+}",
@@ -1125,7 +1174,7 @@ if __name__ == "__main__":
          }
      }
     '''
-    
+
     event_str_group_region_type = '''
     {
      "resource": "/groups/{proxy+}",
@@ -1134,7 +1183,7 @@ if __name__ == "__main__":
          }
      }
     '''
-    
+
     event_str_group_region_type_name = '''
     {
      "resource": "/groups/{proxy+}",
@@ -1153,7 +1202,7 @@ if __name__ == "__main__":
       }
     }
     '''
-    
+
     event_str_leader_limit = '''
     {
       "resource": "/leaders/{category}/region/{region}/type/{type}/limit/{limit}",
@@ -1165,7 +1214,7 @@ if __name__ == "__main__":
       }
     }
     '''
-    
+
     event_str_leader_ach = '''
     {
       "resource": "/leaders/{category}/region/{region}/type/{type}",
@@ -1176,7 +1225,7 @@ if __name__ == "__main__":
       }
     }
     '''
-    
+
     event_str_eloprogress_guid = '''
     {
       "resource": "/eloprogress/player/{player_guid}/region/{region}/type/{type}",
@@ -1189,7 +1238,7 @@ if __name__ == "__main__":
       "pathParameters":{"match_id":"1629382279"}
     }
     '''
-    
+
     event_str_aliases_guid = '''
     {
       "resource": "/aliases/player/{player_guid}",
@@ -1197,14 +1246,14 @@ if __name__ == "__main__":
     }
     '''
     # 8e6a51baf1c7e338a118d9e32472954e
-    
+
     event_str_aliases_search = '''
     {
       "resource": "/aliases/search/{begins_with}",
       "pathParameters":{"begins_with":"fatal"}
     }
     '''
-    
+
     event_str_stats_group = '''
     {
       "resource": "/stats/group/{group_name}",
@@ -1217,7 +1266,7 @@ if __name__ == "__main__":
       "pathParameters":{"group_name":"gather15943"}
     }
     '''
-    
+
     event_str_event_limit = '''
     {
       "resource": "/events/{limit}",
@@ -1226,6 +1275,6 @@ if __name__ == "__main__":
       }
     }
     '''
- 
+
     event = json.loads(event_str_matches_health)
     print(handler(event, None)['body'])
