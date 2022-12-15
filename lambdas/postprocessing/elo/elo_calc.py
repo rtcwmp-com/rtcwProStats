@@ -24,7 +24,7 @@ class PlayerElo(object):
         self.create_dt = datetime.utcnow()
         self.player_id = player_id
         self.game_type_cd = game_type_cd
-        self.elo = 100.0
+        self.elo = 1400.0
         self.g2_r = None
         self.g2_rd = None
         self.score = 0
@@ -48,7 +48,7 @@ class PlayerElo(object):
 
 
 class EloParms:
-    def __init__(self, global_K = 15, initial = 100, floor = 80, logdistancefactor = math.log(10)/float(400), maxlogdistance = math.log(10)):
+    def __init__(self, global_K = 15, initial = 1400, floor = 1200, logdistancefactor = math.log(10)/float(400), maxlogdistance = math.log(10)):
         self.global_K = global_K
         self.initial = initial
         self.floor = floor
@@ -85,7 +85,7 @@ class KReduction:
 # parameters for K reduction
 # this may be touched even if the DB already exists
 
-KREDUCTION = KReduction(900, 75, 0.5, 3, 10, 0.2)
+KREDUCTION = KReduction(900, 75, 0.5, 3, 20, 0.2)
 
 # parameters for chess elo
 # only global_K may be touched even if the DB already exists
@@ -156,7 +156,10 @@ def process_rtcwpro_elo(ddb_table, ddb_client, match_id, log_stream_name):
         for result in response:
             guid = result["pk"].split("#")[1]
             if match_region_type in result["sk"]:
-                elo_dict[guid] = result["data"]
+                new_elo = int(result["data"])
+                if new_elo < 500:  # old elo calc
+                    new_elo = new_elo * 4.453  # new elo increase
+                elo_dict[guid] = new_elo
                 elo_games[guid] = int(result["games"]) 
                 logger.debug("Retrieved " + match_region_type + "#elo" + " " + " " + real_names.get(guid,"no_name").ljust(20) + " elo:" + str(elo_dict[guid]) + " games " + str(elo_games[guid]))
 
@@ -178,12 +181,12 @@ def process_rtcwpro_elo(ddb_table, ddb_client, match_id, log_stream_name):
     for guid, player_stats in stats.items():
         score_step_1 = player_stats["categories"].get("kills", 0)
         score_step_2 = score_step_1 \
-            - wstat(new_wstats, guid, "Panzer", "kills") * .30 \
-            - wstat(new_wstats, guid, "Artillery", "kills") * .30 \
-            - wstat(new_wstats, guid, "Airstrike", "kills") * .30 \
+            - wstat(new_wstats, guid, "Panzer", "kills") * .20 \
+            - wstat(new_wstats, guid, "Artillery", "kills") * .10 \
+            - wstat(new_wstats, guid, "Airstrike", "kills") * .10 \
             - wstat(new_wstats, guid, "Mauser", "kills") * .30
         
-        win_multiplier = 1.5 if player_stats["team"] == winner else 1
+        win_multiplier = 2.5 if player_stats["team"] == winner else 1
         score_step_3 = int(score_step_2 * win_multiplier)
         
         player_scores[guid] = Player(score_step_3, duration, elo_games.get(guid,0)) # if elo is not there, default will be 0 anyway
