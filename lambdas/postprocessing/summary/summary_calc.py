@@ -419,7 +419,7 @@ def ddb_prepare_achievement_items(potential_achievements, achievements_old, real
                     item['eventtype'] = 'New player achievement'
                     item['eventdesc'] = achievement + "#" + str(player_value).zfill(6) + "#" + match_region_type + "#" + real_names.get(guid, "no_name")
                 else:
-                    print(guid + " had not enough" + str(player_games.get(guid, 0)) + " games")
+                    print(guid + " had not enough " + str(player_games.get(guid, 0)) + " games")
                 items.append(item)
     return items
 
