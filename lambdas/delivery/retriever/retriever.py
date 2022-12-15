@@ -398,7 +398,7 @@ def handler(event, context):
                 data = response
 
     if api_path == "/player/{player_guid}" or api_path == "/player/{player_guid}/season/{season_id}":
-        skoal = ['0746b934fe74063ca9f9c3c4be504590', '4a91611dcf6771487449f1e100d2a295']
+        skoal = get_skoal()
         logger.info("Processing " + api_path)
         if "player_guid" in event["pathParameters"]:
             player_guid = event["pathParameters"]["player_guid"]
@@ -1003,7 +1003,7 @@ def process_player_response(response):
 
 
 def process_leader_response(response):
-    skoal = ['0746b934fe74063ca9f9c3c4be504590', '4a91611dcf6771487449f1e100d2a295']
+    skoal = get_skoal()
     data = []
     if "error" in response:
         data = response
@@ -1070,6 +1070,20 @@ def process_alias_responses(api_path, responses):
             data_line["guid"] = player["sk"].split("#")[0]
             data.append(data_line)
     return data
+
+def get_skoal():
+    """
+    Get list og players that with not to be on ladders and personal profiles.
+    """
+    pk = "skoal"
+    sk = "v0"
+    skoal = []
+    try:
+        skoal_response = get_item(pk, sk, ddb_table, "skoal_get")
+        skoal = json.loads(skoal_response.get("skoal", "[]"))
+    except:
+        logger.error("Could not get skoal.")
+    return skoal
 
 
 if __name__ == "__main__":
@@ -1276,5 +1290,5 @@ if __name__ == "__main__":
     }
     '''
 
-    event = json.loads(event_str_matches_health)
+    event = json.loads(event_str_leader)
     print(handler(event, None)['body'])
