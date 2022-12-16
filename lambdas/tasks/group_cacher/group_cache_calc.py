@@ -182,8 +182,6 @@ def derive_classes(stats_dict_updated, wstats_dict_updated):
     return classes
 
 def get_elos(new_total_stats, ddb_table, match_region_type, log_stream_name):
-    skoal = ['0746b934fe74063ca9f9c3c4be504590', '4a91611dcf6771487449f1e100d2a295']
-
     big_item_list = []
     big_item_list.extend(prepare_elo_item_list(new_total_stats, match_region_type))
     
@@ -196,11 +194,7 @@ def get_elos(new_total_stats, ddb_table, match_region_type, log_stream_name):
         logger.info("Got elos for number of items: " + str(len(responses)))
         for response in responses:
             guid = response["pk"].split("#")[1]
-
-            if guid in skoal:
-                elo = 0
-            else:
-                elo = int(response["data"])
+            elo = int(response["data"])
 
             real_name = response["real_name"]
             elos[guid] = [real_name, elo]
