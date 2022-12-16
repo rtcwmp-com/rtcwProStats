@@ -1073,7 +1073,7 @@ def process_alias_responses(api_path, responses):
 
 def get_skoal():
     """
-    Get list og players that with not to be on ladders and personal profiles.
+    Get list of players that wish not to be on ladders and personal profiles.
     """
     pk = "skoal"
     sk = "v0"
