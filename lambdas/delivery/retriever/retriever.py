@@ -292,8 +292,14 @@ def handler(event, context):
         response = get_item(pk, sk, ddb_table, log_stream_name)
 
         # logic specific to /stats/group/{group_name}
+        skoal = get_skoal()
         if "error" not in response:
             data = json.loads(response["data"])
+            if "elos" in data:
+                for guid in data["elos"]:
+                    if guid in skoal:
+                        if len(data["elos"][guid]) == 2:  # safety
+                            data["elos"][guid][1] = 0
         else:
             data = response
 
@@ -1271,7 +1277,7 @@ if __name__ == "__main__":
     event_str_stats_group = '''
     {
       "resource": "/stats/group/{group_name}",
-      "pathParameters":{"group_name":"monthly-2022February"}
+      "pathParameters":{"group_name":"gather-1671173066"}
     }
     '''
     event_str_wstats_group = '''
@@ -1290,5 +1296,5 @@ if __name__ == "__main__":
     }
     '''
 
-    event = json.loads(event_str_leader)
+    event = json.loads(event_str_stats_group)
     print(handler(event, None)['body'])
