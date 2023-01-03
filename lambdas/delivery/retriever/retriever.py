@@ -444,7 +444,7 @@ def handler(event, context):
 
         only_recent = True
         if category.lower() not in ["elo", "kdr", "acc"]:
-            pk = "leader#" + category + "#" + region + "#" + type_
+            pk = "leader#" + category + "#" + region + "#" + type_  # pound is the historical difference
             only_recent = False
         else:
             pk = "leader" + category + "#" + region + "#" + type_
@@ -472,7 +472,7 @@ def handler(event, context):
         projections = "data, gsi1sk, elo, performance_score, real_name"
         response = get_begins(pk_name, pk, begins_with, ddb_table, index_name, skname, projections, log_stream_name,
                               limit, ascending)
-        data = process_eloprogress_response(response)
+        data = process_eloprogress_response(response, filter_old_elos=True)
 
     if api_path == "/eloprogress/match/{match_id}":
         logger.info("Processing " + api_path)
@@ -645,17 +645,6 @@ def handler(event, context):
             responses = get_begins(pk_name, pk, begins_with, ddb_table, index_name, skname, projections,
                                    log_stream_name, 100, ascending)
             data = process_group_responses(responses)
-
-        # if len(path_tokens) == 2 and path_tokens[0] == "region" and path_tokens[1] in ["sa","na","eu","unk"]:
-        #     logger.info("Parameter: /groups/region/{region_name}")
-        #     pk_name = "pk"
-        #     pk = "group"
-        #     index_name = "lsi"
-        #     skname="lsipk"
-        #     begins_with = path_tokens[1]
-        #     ascending = False
-        #     responses = get_begins(pk_name, pk, begins_with, ddb_table, index_name, skname, projections, log_stream_name, 100, ascending)  
-        #     data = process_group_responses(responses)    
 
         if (len(path_tokens) == 4 and path_tokens[0] == "region" and path_tokens[1] in ["sa", "na", "eu", "unk"] and
                 path_tokens[2] == "type" and path_tokens[3] in ["3", "6", "6plus"]):
@@ -1036,7 +1025,7 @@ def process_leader_response(response):
     return data
 
 
-def process_eloprogress_response(response):
+def process_eloprogress_response(response, filter_old_elos=True):
     data = []
     if "error" in response:
         data = response
@@ -1049,14 +1038,20 @@ def process_eloprogress_response(response):
                 elo_delta['elo'] = int(item["elo"])
                 elo_delta['match_id'] = int(item.get("gsi1sk", 0))
                 elo_delta['real_name'] = item.get("real_name", "no_name#")
-                data.append(elo_delta)
+                if filter_old_elos:
+                    if int(item["elo"]) > 500:  # leave off old values
+                        data.append(elo_delta)
+                else:
+                    data.append(elo_delta)
         except:
-            item_info = "unkown"
+            item_info = "unknown"
             if len(response) > 0:
                 if "pk" in response[0]:
                     item_info = item["pk"]
             data = make_error_dict("Could not process leader response.", item_info)
             logger.error(data["error"])
+    if filter_old_elos and len(data) == 0:
+        process_eloprogress_response(response, filter_old_elos=False)
     return data
 
 
@@ -1076,6 +1071,7 @@ def process_alias_responses(api_path, responses):
             data_line["guid"] = player["sk"].split("#")[0]
             data.append(data_line)
     return data
+
 
 def get_skoal():
     """
@@ -1249,7 +1245,7 @@ if __name__ == "__main__":
     event_str_eloprogress_guid = '''
     {
       "resource": "/eloprogress/player/{player_guid}/region/{region}/type/{type}",
-      "pathParameters":{"player_guid":"8e6a51baf1c7e338a118d9e32472954e","region":"na","type":"6"}
+      "pathParameters":{"player_guid":"49d64b3c0fcd5512a8e87b6287b29b21","region":"na","type":"6"}
     }
     '''
     event_str_eloprogress_match = '''
@@ -1296,5 +1292,5 @@ if __name__ == "__main__":
     }
     '''
 
-    event = json.loads(event_str_stats_group)
+    event = json.loads(event_str_eloprogress_guid)
     print(handler(event, None)['body'])
