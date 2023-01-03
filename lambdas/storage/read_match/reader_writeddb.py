@@ -237,7 +237,8 @@ def ddb_prepare_wstat_items(gamestats):
         wstat_item = {
             'pk'    : "wstats#" + playerguid,
             'sk'    : matchid,
-            'data'  : json.dumps(player[playerguid])
+            'data'  : json.dumps(player[playerguid]),
+            'ExpirationTime': int(matchid) + 60 * 60 * 24 * 31  # expire after 1 month
             }
         wstat_items.append(wstat_item)
     return wstat_items
