@@ -29,6 +29,8 @@ from reader_writeddb import (
 # pip install --target ./ sqlalchemy
 # import sqlalchemy
 
+dry_run = False
+
 log_level = logging.INFO
 logging.basicConfig(format='%(name)s:%(levelname)s:%(message)s')
 logger = logging.getLogger("read_match")
@@ -197,84 +199,74 @@ def handler(event, context):
 
     total_items = str(len(items))
     message = ""
-    t1 = _time.time()
-# =============================================================================
-#     for Item in items:
-#         response = None
-#         try:
-#             response = ddb_put_item(Item, table)
-#         except Exception as ex:
-#             template = "An exception of type {0} occurred. Arguments:\n{1!r}"
-#             error_msg = template.format(type(ex).__name__, ex.args)
-#             message = "Failed to load all records for a match " + file_key + "\n" + error_msg
-#
-#         if response["ResponseMetadata"]['HTTPStatusCode'] != 200:
-#             message += "\nItem returned non 200 code " + Item["pk"] + ":" + Item["sk"]
-# =============================================================================
 
-    try:
-        ddb_batch_write(ddb_client, table.name, items)
-        message = f"Sent {file_key} to database with {total_items} items. pk = match, sk = {match_id}"
-    except Exception as ex:
-        template = "An exception of type {0} occurred. Arguments:\n{1!r}"
-        error_msg = template.format(type(ex).__name__, ex.args)
-        message = "Failed to load all records for a match " + file_key + "\n" + error_msg
-        logger.error(message)
-        return message
-
-    try:
-        ddb_update_user_records(old_player_items, table)
-        logger.info(f"Updated player dates for {match_id}")
-    except Exception as ex:
-        template = "An exception of type {0} occurred. Arguments:\n{1!r}"
-        error_msg = template.format(type(ex).__name__, ex.args)
-        message = "Failed to update all player dates for a match " + match_id + "\n" + error_msg
-        logger.warning(message)
-
-    try:
-        response = sf_client.start_execution(stateMachineArn=MATCH_STATE_MACHINE,
-                                             input='{"matchid": "' + gamestats["gameinfo"]["match_id"] + '","roundid": ' + gamestats["gameinfo"]["round"] + '}'
-                                             )
-    except Exception as ex:
-        template = "An exception of type {0} occurred. Arguments:\n{1!r}"
-        error_msg = template.format(type(ex).__name__, ex.args)
-        message = "Failed to start state machine for " + gamestats["gameinfo"]["match_id"] + "\n" + error_msg
-        logger.error(message)
-        return message
-    else:
-        if response['ResponseMetadata']['HTTPStatusCode'] == 200:
-            logger.info("Started state machine " + response['executionArn'])
-        else:
-            logger.warning("Bad response from state machine " + str(response))
-            message += "\nState machine failed."
+    if not dry_run:
+        t1 = _time.time()
+        try:
+            ddb_batch_write(ddb_client, table.name, items)
+            message = f"Sent {file_key} to database with {total_items} items. pk = match, sk = {match_id}"
+        except Exception as ex:
+            template = "An exception of type {0} occurred. Arguments:\n{1!r}"
+            error_msg = template.format(type(ex).__name__, ex.args)
+            message = "Failed to load all records for a match " + file_key + "\n" + error_msg
             logger.error(message)
             return message
 
-    try:
-        events = []
-        new_player_events = announce_new_players(gamestats, real_names, match_type)
-        new_server_events = announce_new_server(server_item)
-        events.extend(new_player_events)
-        events.extend(new_server_events)
+        try:
+            ddb_update_user_records(old_player_items, table)
+            logger.info(f"Updated player dates for {match_id}")
+        except Exception as ex:
+            template = "An exception of type {0} occurred. Arguments:\n{1!r}"
+            error_msg = template.format(type(ex).__name__, ex.args)
+            message = "Failed to update all player dates for a match " + match_id + "\n" + error_msg
+            logger.warning(message)
 
-        if len(events) > 0:
-            response = event_client.put_events(Entries=events)
-    except Exception as ex:
-        template = "An exception of type {0} occurred. Arguments:\n{1!r}"
-        error_msg = template.format(type(ex).__name__, ex.args)
-        message = "Failed to announce new players via event bridge in " + gamestats["gameinfo"]["match_id"] + "\n" + error_msg
-        logger.error(message)
-    else:
-        if response and response['ResponseMetadata']['HTTPStatusCode'] == 200:
-            logger.info("Submitted new player event(s)")
-        else:
-            logger.warning("Bad response from event bridge " + str(response))
-            message += "Failed to announce new players\n."
+        try:
+            response = sf_client.start_execution(stateMachineArn=MATCH_STATE_MACHINE,
+                                                 input='{"matchid": "' + gamestats["gameinfo"]["match_id"] + '","roundid": ' + gamestats["gameinfo"]["round"] + '}'
+                                                 )
+        except Exception as ex:
+            template = "An exception of type {0} occurred. Arguments:\n{1!r}"
+            error_msg = template.format(type(ex).__name__, ex.args)
+            message = "Failed to start state machine for " + gamestats["gameinfo"]["match_id"] + "\n" + error_msg
             logger.error(message)
+            return message
+        else:
+            if response['ResponseMetadata']['HTTPStatusCode'] == 200:
+                logger.info("Started state machine " + response['executionArn'])
+            else:
+                logger.warning("Bad response from state machine " + str(response))
+                message += "\nState machine failed."
+                logger.error(message)
+                return message
 
-    logger.info(message)
-    time_to_write = str(round((_time.time() - t1), 3))
-    logger.info(f"Time to write {total_items} items is {time_to_write} s")
+        try:
+            events = []
+            new_player_events = announce_new_players(gamestats, real_names, match_type)
+            new_server_events = announce_new_server(server_item)
+            events.extend(new_player_events)
+            events.extend(new_server_events)
+
+            if len(events) > 0:
+                response = event_client.put_events(Entries=events)
+        except Exception as ex:
+            template = "An exception of type {0} occurred. Arguments:\n{1!r}"
+            error_msg = template.format(type(ex).__name__, ex.args)
+            message = "Failed to announce new players via event bridge in " + gamestats["gameinfo"]["match_id"] + "\n" + error_msg
+            logger.error(message)
+        else:
+            if response and response['ResponseMetadata']['HTTPStatusCode'] == 200:
+                logger.info("Submitted new player event(s)")
+            else:
+                logger.warning("Bad response from event bridge " + str(response))
+                message += "Failed to announce new players\n."
+                logger.error(message)
+
+        logger.info(message)
+        time_to_write = str(round((_time.time() - t1), 3))
+        logger.info(f"Time to write {total_items} items is {time_to_write} s")
+    else:
+        logger.info("Skipped submission due to dry run")
     return message
 
 
