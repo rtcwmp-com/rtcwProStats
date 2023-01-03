@@ -24,7 +24,8 @@ class DatabaseStack(Stack):
             billing_mode=BillingMode.PAY_PER_REQUEST,
             point_in_time_recovery=True,
             encryption=TableEncryption.AWS_MANAGED,
-            removal_policy=RemovalPolicy.RETAIN
+            removal_policy=RemovalPolicy.RETAIN,
+            time_to_live_attribute="ExpirationTime"
         )
 
         ddb_table.add_global_secondary_index(

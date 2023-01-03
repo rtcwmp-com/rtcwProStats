@@ -171,8 +171,12 @@ def ddb_prepare_stats_items(gamestats):
                 'sk'    : matchid,
                 'gsi1pk': "stats#" + gamestats["match_type"] + "#" + playerguid,
                 'gsi1sk': matchid,
-                'data'  : json.dumps(stat)
+                'data'  : json.dumps(stat),
+                'gsi2pk': "playermap",
+                'gsi2sk': gamestats["gameinfo"].get("map", "unk") + "#" + playerguid + "#" + matchid,
+                'ExpirationTime': int(matchid) + 60 * 60 * 24 * 92  # expire after 3 months
              }
+            print(stats_item)
             if playerguid in duplicates_check:
                 logger.warning("Skipping duplicate player in stats " + playerguid)
             else:
