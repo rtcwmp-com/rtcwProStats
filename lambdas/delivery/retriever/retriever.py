@@ -472,7 +472,7 @@ def handler(event, context):
         projections = "data, gsi1sk, elo, performance_score, real_name"
         response = get_begins(pk_name, pk, begins_with, ddb_table, index_name, skname, projections, log_stream_name,
                               limit, ascending)
-        data = process_eloprogress_response(response, filter_old_elos=True)
+        data = process_eloprogress_response(response, True)
 
     if api_path == "/eloprogress/match/{match_id}":
         logger.info("Processing " + api_path)
@@ -491,7 +491,7 @@ def handler(event, context):
         projections = "data, gsi1sk, elo, performance_score, real_name"
         response = get_begins(pk_name, pk, begins_with, ddb_table, index_name, skname, projections, log_stream_name,
                               limit, ascending)
-        data = process_eloprogress_response(response)
+        data = process_eloprogress_response(response, False)
 
     if api_path == "/player/search/{begins_with}":
         logger.info("Processing " + api_path)
@@ -1025,7 +1025,7 @@ def process_leader_response(response):
     return data
 
 
-def process_eloprogress_response(response, filter_old_elos=True):
+def process_eloprogress_response(response, filter_old_elos):
     data = []
     if "error" in response:
         data = response
@@ -1051,7 +1051,7 @@ def process_eloprogress_response(response, filter_old_elos=True):
             data = make_error_dict("Could not process leader response.", item_info)
             logger.error(data["error"])
     if filter_old_elos and len(data) == 0:
-        process_eloprogress_response(response, filter_old_elos=False)
+        data = process_eloprogress_response(response, False)
     return data
 
 
@@ -1245,7 +1245,7 @@ if __name__ == "__main__":
     event_str_eloprogress_guid = '''
     {
       "resource": "/eloprogress/player/{player_guid}/region/{region}/type/{type}",
-      "pathParameters":{"player_guid":"49d64b3c0fcd5512a8e87b6287b29b21","region":"na","type":"6"}
+      "pathParameters":{"player_guid":"7d2ad4fbab87dce755866b39f771acbf","region":"na","type":"6"}
     }
     '''
     event_str_eloprogress_match = '''
