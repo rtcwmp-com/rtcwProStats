@@ -528,7 +528,8 @@ def ddb_prepare_eloprogress_items(player_scores, elos, elo_deltas, match_id, mat
             'gsi1sk': match_id,
             'real_name': real_names.get(guid,""),
             'elo': int(round(elo, 0)),
-            'performance_score': performance_score
+            'performance_score': performance_score,
+            'ExpirationTime': int(match_id) + 60 * 60 * 24 * 92  # expire after 3 months
             }
         elo_delta_items.append(elo_item)
     return elo_delta_items
