@@ -9,7 +9,6 @@ class Achievements:
         self.get_combat_engineer_lines(stats)
         self.get_combat_lt_lines(stats, wstats)
 
-
     def get_killpeak_lines(self, stats):
         """Return result as {"Award name": {"guid":"value"}}."""
         """Simply filter down killpeaks to 6"""
@@ -132,6 +131,25 @@ class Achievements:
                     temp_achievements[guid] = 4
                     continue
             self.potential_achievements["Lieutenant Colonel"] = temp_achievements
+
+    def get_headshot_ratios(self, wstats_dict_updated):
+        """Return result as {"Award name": {"guid":"value"}}."""
+        """Get headshot ratios."""
+        temp_achievements = {}
+        for guid, wstats in wstats_dict_updated.items():
+            try:
+                hits = headshots = 0
+                for weapon, wstat in wstats.items():
+                    if weapon in ['MP-40', 'Thompson', 'Sten', 'Colt', 'Luger']:
+                        hits += wstat["hits"]
+                        headshots += wstat["headshots"]
+                hits = hits if hits > 0 else 1
+                headshot_ratio = round(headshots / hits * 100, 1)
+                if headshot_ratio > 11 and wstats.get('MP-40', {}).get("games", 0) > 10:
+                    temp_achievements[guid] = headshot_ratio
+            except Exception as ex:
+                print("ERROR in get_headshot_ratios. Exception" + str(ex))
+        self.potential_achievements["Sharpshooter"] = temp_achievements
     
 # debug
 # self = Achievements(stats, wstats)

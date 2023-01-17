@@ -40,9 +40,9 @@ def handler(event, context):
     
     message = process_rtcwpro_summary(ddb_table, ddb_client, event_client, match_id, log_stream_name, CUSTOM_BUS)
 
-    return {"Final Message" : message}
+    return {"Final Message": message}
 
 
 if __name__ == "__main__":
-    event = 1649563154
+    event = 1673935466
     handler(event, None)

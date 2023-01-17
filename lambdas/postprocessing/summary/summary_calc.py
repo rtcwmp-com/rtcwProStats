@@ -42,15 +42,19 @@ def process_rtcwpro_summary(ddb_table, ddb_client, event_client, match_id, log_s
         return message
     
     item_list = []
+    logger.info("Preparing real names.")
     real_name_list = prepare_playerinfo_list(stats, "realname")
     item_list.extend(real_name_list)
-    
+
+    logger.info("Getting a list for aggregated stats.")
     aggstats_item_list = prepare_playerinfo_list(stats, "aggstats#" + match_region_type)
     item_list.extend(aggstats_item_list)
-    
+
+    logger.info("Getting a list for aggregated wstats.")
     aggwstats_item_list = prepare_playerinfo_list(stats, "aggwstats#" + match_region_type)
     item_list.extend(aggwstats_item_list)
-    
+
+    logger.info("Getting previous real names, stats and wstats.")
     response = get_batch_items(item_list, ddb_table, log_stream_name)
     
     stats_old = {}
@@ -78,7 +82,8 @@ def process_rtcwpro_summary(ddb_table, ddb_client, event_client, match_id, log_s
             logger.error(json.dumps(response))
             message += "Error in summary_calc.get_batch_items" + response["error"]
             return message
-   
+
+    logger.info("Converting wstats to new format.")
     new_wstats = {}
     for wplayer_wrap in wstats:
         for wplayer_guid, wplayer in wplayer_wrap.items():
@@ -88,28 +93,33 @@ def process_rtcwpro_summary(ddb_table, ddb_client, event_client, match_id, log_s
             new_wstats[wplayer_guid] = new_wplayer
     
     # build updated stats summaries
+    logger.info("Summarizing stats.")
     stats_dict_updated = build_new_stats_summary(stats, stats_old)
     
     games_dict = {}
     for s in stats_dict_updated:
         games_dict[s] = int(stats_dict_updated[s]["games"])
-    
+
+    logger.info("Calculating aggregated stats.")
     stats_items = ddb_prepare_statswstats_items("stats", stats_dict_updated, match_region_type, real_names, games_dict)
     
     # build updated wtats summaries
     wstats = new_wstats
     wstats_dict_updated = build_new_wstats_summary(wstats, wstats_old)
+    logger.info("Calculating aggregated wstats.")
     wstats_items = ddb_prepare_statswstats_items("wstats", wstats_dict_updated, match_region_type, real_names, games_dict)
 
     try:
         achievements_class = Achievements(stats, wstats)
+        achievements_class.get_headshot_ratios(wstats_dict_updated)
         potential_achievements = achievements_class.potential_achievements
     except Exception as ex:
         template = "An exception of type {0} occurred. Arguments:\n{1!r}"
         error_msg = template.format(type(ex).__name__, ex.args)
         message = "Failed to process summary achievements for a match " + match_id + "\n" + error_msg
         logger.info(message)
-    
+
+    logger.info("Retrieving old achievements.")
     potential_achievements_item_list = prepare_old_achievements_list(potential_achievements, match_region_type)
     item_list = []
     item_list.extend(potential_achievements_item_list)
@@ -221,7 +231,7 @@ def build_new_stats_summary(stats, stats_old):
                 stats_dict_updated[guid][metric] = int(metrics[metric])
                 continue
             if metric in stats_old[guid]:
-                if metric not in ["accuracy","efficiency", "killpeak"]:
+                if metric not in ["accuracy", "efficiency", "killpeak"]:
                     stats_dict_updated[guid][metric] = int(stats_old[guid][metric]) + int(metrics[metric])
             else:
                 stats_dict_updated[guid][metric] = int(metrics[metric])
@@ -401,19 +411,24 @@ def ddb_prepare_achievement_items(potential_achievements, achievements_old, real
     ts = datetime.now().isoformat()
     for achievement, achievement_table in potential_achievements.items():
         for guid, player_value in achievement_table.items():
-            if int(player_value) > int(achievements_old.get(guid + "#" + achievement,0)):
+            if float(player_value) > float(achievements_old.get(guid + "#" + achievement,0)):
+                if achievement == "Sharpshooter":
+                    val = str(round(player_value, 2)).zfill(4)
+                else:
+                    val = str(player_value).zfill(6)
+
                 item = {
                     'pk'            : "player" + "#" + guid,
                     'sk'            : "achievement#" + achievement + "#" + match_region_type,
                     'lsipk'         : "achievement#" + ts,
                     'gsi1pk'        : "leader#" + achievement + "#" + match_region_type,
-                    'gsi1sk'        : str(player_value).zfill(6),
+                    'gsi1sk'        : val,
                     "real_name"     : real_names.get(guid, "no_name#"),
                     "match_id"      : match_id
                 }
                 #only mark achievements for players with > 40 games
                 if int(player_games.get(guid, 0)) > 40:
-                    print(guid + " had enough " + str(player_games.get(guid, 0)) + " games")
+                    # print(guid + " had enough " + str(player_games.get(guid, 0)) + " games")
                     item['gsi2pk'] = "event"
                     item['gsi2sk'] = ts
                     item['eventtype'] = 'New player achievement'
@@ -427,7 +442,7 @@ def calculate_accuracy(player_stat):
     try:
         hits = shots = 0
         for weapon, wstat in player_stat.items():
-            if weapon in ['MP-40','Thompson','Sten', 'Colt', 'Luger']:
+            if weapon in ['MP-40', 'Thompson', 'Sten', 'Colt', 'Luger']:
                 hits += wstat["hits"]
                 s = wstat["shots"] if wstat["shots"] > 0 else 1
                 shots += s
@@ -435,7 +450,6 @@ def calculate_accuracy(player_stat):
     except:
         acc = 0.0
     return acc
-
 
 def create_batch_write_structure(table_name, items, start_num, batch_size):
     """
