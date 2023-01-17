@@ -12,7 +12,6 @@ class StorageStack(Stack):
     """S3 bucket for incoming files and reader lambda."""
 
     def __init__(self, scope: Construct, id: str,
-                 lambda_tracing,
                  **kwargs) -> None:
         super().__init__(scope, id, **kwargs)
 
@@ -48,7 +47,7 @@ class StorageStack(Stack):
         read_dlq = sqs.Queue(self, id="ReadMatchDLQ")
         read_queue = sqs.Queue(self, "ReadMatchQueue",
                                visibility_timeout=Duration.seconds(60),
-                               dead_letter_queue = sqs.DeadLetterQueue(max_receive_count=1, queue=read_dlq))
+                               dead_letter_queue=sqs.DeadLetterQueue(max_receive_count=1, queue=read_dlq))
         sqs_notification = s3n.SqsDestination(read_queue)
         storage_bucket.add_event_notification(s3.EventType.OBJECT_CREATED, sqs_notification, s3.NotificationKeyFilter(prefix="intake/"))
         
@@ -58,3 +57,4 @@ class StorageStack(Stack):
         self.storage_bucket = storage_bucket
         self.read_queue = read_queue
         self.read_dlq = read_dlq
+        self.ops_topic = ops_topic

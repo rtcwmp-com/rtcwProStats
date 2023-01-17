@@ -128,3 +128,5 @@ class PostProcessStack(Stack):
                                                   )
 
         self.postproc_state_machine = postproc_state_machine
+        self.elo_lambda = elo_lambda
+        self.summary_lambda = summary_lambda

@@ -16,6 +16,7 @@ from stacks.read_match_lambda import ReadMatchStack
 from stacks.taskfunnel import TaskFunnelStack
 from stacks.custom_bus import CustomBusStack
 from stacks.gamelog_lambda import GamelogLambdaStack
+from stacks.observability import ObservabilityStack
 
 import aws_cdk.aws_iam as iam
 
@@ -52,7 +53,7 @@ if enable_tracing:
 
 database = DatabaseStack(app, "rtcwprostats-database", env=env)
 
-storage = StorageStack(app, "rtcwprostats-storage", env=env, lambda_tracing=lambda_tracing)
+storage = StorageStack(app, "rtcwprostats-storage", env=env)
 
 custom_bus_stack = CustomBusStack(app, "rtcwprostats-custom-bus", lambda_tracing=lambda_tracing, 
                                   ddb_table=database.ddb_table, 
@@ -119,6 +120,16 @@ DeliveryStack(app, "rtcwprostats-delivery",
               retriever=retriever.retriever_lambda,
               delivery_writer=delivery_writer.delivery_writer_lambda,
               env=env)
+
+ObservabilityStack(app, "rtcwprostats-observe",
+                   sns_topic=storage.ops_topic,
+                   save_payload_lambda=apistack.save_payload,
+                   read_match_lambda=reader.read_match,
+                   gamelog_lambda=gamelog_lambda_stack.gamelog_lambda,
+                   summary_lambda=post_process_stack.summary_lambda,
+                   elo_lambda=post_process_stack.elo_lambda,
+                   env=env
+                   )
 
 def strip_permissions(node):
     for child in node.children:
