@@ -147,9 +147,12 @@ def build_new_match_summary(match_dict, team_mapping):
 def infer_winners_bandaid(results, match_dict):
     """Determine winner of the game before this issue is closed and tested.
     https://github.com/rtcwmp-com/rtcwPro/issues/369 ."""
-    
-    offense_allied = ["mp_base", "mp_sub","braundorf_b7", "mp_password2", "mp_village","bd_bunker_b2", "mp_beach","te_adlernest_b1","te_cipher_b5","te_delivery_b1","te_escape2","te_frostbite", "te_ufo","sub2_b7","mp_rocket","mp_castle","sw_tram_b2"]
-    offense_axis = ["tram2_b3", "mp_assault", "mp_ice", "te_kungfugrip","te_redue_b5","te_redue_b5", "te_redue_b6"]
+
+    offense_allied = ["mp_base", "mp_sub", "braundorf_b7", "mp_password2", "mp_village", "bd_bunker_b2", "mp_beach",
+                      "te_adlernest_b1", "te_cipher_b5", "te_delivery_b1", "te_escape2", "te_frostbite", "te_ufo",
+                      "sub2_b7", "sub2_b8", "mp_rocket", "mp_castle", "sw_tram_b2"]
+    offense_axis = ["tram2_b3", "tram2_b4", "mp_assault", "mp_ice", "te_kungfugrip", "te_redue_b5", "te_redue_b5",
+                    "te_redue_b6"]
     
     for match_id, info in results.items():
         winner = "Draw"
