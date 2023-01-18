@@ -36,6 +36,26 @@ def move_killpeak_region_type(ddb_table, region, type_):
            new_kp_items.append(new_record)
        logger.info("Copying names")
        ddb_batch_write(ddb_client, ddb_table.name, new_kp_items)
+
+
+def pad_killpeak_with_zeros(ddb_table, region, type_):
+    pk_base = "leader#Killpeak#"
+    skname = 'gsi1sk'
+    pk = pk_base + region + "#" + type_
+    response = ddb_table.query(IndexName='gsi1', KeyConditionExpression=Key('gsi1pk').eq(pk) & Key(skname).gt('000020'))
+
+    new_kp_items = []
+    if response['Count'] > 0:
+        for record in response["Items"]:
+            new_record = record.copy()
+            new_record['gsi1sk'] = record["gsi1sk"].zfill(6)
+            if "games" in new_record:
+                del new_record['games']
+            if "data" in new_record:
+                del new_record['data']
+            new_kp_items.append(new_record)
+        logger.info("padding...")
+        ddb_batch_write(ddb_client, ddb_table.name, new_kp_items)
     
 def create_batch_write_structure(table_name, items, start_num, batch_size):
     """
@@ -112,7 +132,8 @@ def ddb_batch_write(client, table_name, items):
 if __name__ == "__main__":
     regions = ["na","eu","sa", "unk"]
     types = ["6","3", "6plus", "unk"]
-    move_killpeak_region_type(ddb_table, regions[2], types[1])
+    # move_killpeak_region_type(ddb_table, regions[2], types[1])
+    pad_killpeak_with_zeros(ddb_table, regions[1], types[3])
     # move_elos(ddb_table)
 
 
