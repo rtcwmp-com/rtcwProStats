@@ -168,9 +168,10 @@ def process_rtcwpro_summary(ddb_table, ddb_client, event_client, match_id, log_s
             events = announce_new_achievements(achievement_items, match_region_type, CUSTOM_BUS)
             post_custom_bus_event(event_client, events)
         except Exception as ex:
-            template = "gamelog_calc.ddb_batch_write: An exception of type {0} occurred. Arguments:\n{1!r}"
+            template = "summary_calc.announce_new_achievements: An exception of type {0} occurred. Arguments:\n{1!r}"
             error_msg = template.format(type(ex).__name__, ex.args)
             message = "Failed to insert/announce achievements for a match.\n" + error_msg
+            logger.warning(message)
         else:
             message = "Achievements records inserted."
     else:
@@ -193,7 +194,12 @@ def announce_new_achievements(achievement_items, match_region_type, CUSTOM_BUS):
     for achievement in achievement_items:
         if 'gsi2sk' in achievement:  # only announce achievements for people with xx games
             achievements_key = achievement['real_name'] + "#" + achievement['sk'].split("#")[1]
-            achievements_value = int(achievement['gsi1sk'])
+
+            try:
+                achievements_value = int(achievement['gsi1sk'])
+            except ValueError:
+                achievements_value = float(achievement['gsi1sk'])
+
             achievements[achievements_key] = achievements_value
 
 
@@ -387,12 +393,13 @@ def ddb_prepare_stat_item(stat_type, guid, match_region_type, player_stat, real_
             acc = 0.0
             games = 0
         acc_str = str(round(acc,1)).zfill(4)
-        gsi1sk =  acc_str
+        gsi1sk = acc_str
         logger.debug("Setting new agg stats for " + guid + " with acc of " + str(acc_str))
     
     
     real_name = real_names.get(guid, "no_name#")
-    
+
+    ts = datetime.now().isoformat()
     item = {
             'pk'            : "player"+ "#" + guid,
             'sk'            : sk,
@@ -401,7 +408,8 @@ def ddb_prepare_stat_item(stat_type, guid, match_region_type, player_stat, real_
             'gsi1sk'        : gsi1sk,
             'data'          : player_stat,
             'games'         : games,
-            "real_name"     : real_name
+            'real_name'     : real_name,
+            'updated': ts
         }
     return item
 
