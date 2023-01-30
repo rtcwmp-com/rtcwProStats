@@ -8,10 +8,11 @@ import aws_cdk.aws_apigateway as apigw
 class DeliveryStack(Stack):
     """Public API for retrieving match and player data."""
 
-    def __init__(self, scope: Construct, id: str, api: apigw.RestApi, retriever: _lambda.IFunction, delivery_writer: _lambda.IFunction, **kwargs) -> None:
+    def __init__(self, scope: Construct, id: str, api: apigw.RestApi, retriever: _lambda.IFunction, server_query: _lambda.IFunction, delivery_writer: _lambda.IFunction, **kwargs) -> None:
         super().__init__(scope, id, **kwargs)
 
         retriever_integration = apigw.LambdaIntegration(retriever)
+        server_query_integration = apigw.LambdaIntegration(server_query)
         delivery_writer_integration = apigw.LambdaIntegration(delivery_writer)
 
         # 1
@@ -141,6 +142,11 @@ class DeliveryStack(Stack):
         #80
         events = api.root.add_resource("events").add_resource("{limit}")
         events.add_method("GET", retriever_integration)
+
+        # 90
+        server_query = api.root.add_resource("serverquery")
+        server_query.add_method("POST", server_query_integration)
+
         
         
         

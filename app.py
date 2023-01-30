@@ -118,6 +118,7 @@ PeriodicalStack(app, "rtcwprostats-periodical",
 DeliveryStack(app, "rtcwprostats-delivery", 
               api=apistack.api,
               retriever=retriever.retriever_lambda,
+              server_query=retriever.server_query_lambda,
               delivery_writer=delivery_writer.delivery_writer_lambda,
               env=env)
 
@@ -151,6 +152,7 @@ print("Deleting lambda resource policies from API lambdas")
 strip_permissions(apistack.node)
 print("Adding lambda resource policies for API lambdas")
 retriever.retriever_lambda.grant_invoke(iam.ServicePrincipal("apigateway.amazonaws.com"))
+retriever.server_query_lambda.grant_invoke(iam.ServicePrincipal("apigateway.amazonaws.com"))
 apistack.save_payload.grant_invoke(iam.ServicePrincipal("apigateway.amazonaws.com"))
 delivery_writer.delivery_writer_lambda.grant_invoke(iam.ServicePrincipal("apigateway.amazonaws.com"))
 

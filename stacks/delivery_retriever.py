@@ -34,5 +34,19 @@ class DeliveryRetrieverStack(Stack):
             }
         )
 
+        server_query = _lambda.Function(
+            self, 'server_query',
+            function_name='rtcwpro-server-query',
+            handler='server_query.handler',
+            runtime=_lambda.Runtime.PYTHON_3_8,
+            code=_lambda.Code.from_asset('lambdas/delivery/server_query'),
+            role=retriever_role,
+            tracing=lambda_tracing,
+            environment={
+                'RTCWPROSTATS_TABLE_NAME': ddb_table.table_name,
+            }
+        )
+
         ddb_table.grant_read_data(retriever_role)
         self.retriever_lambda = retriever
+        self.server_query_lambda = server_query
