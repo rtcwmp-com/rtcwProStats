@@ -8,6 +8,7 @@ from datetime import datetime
 import logging
 import math
 from botocore.exceptions import ClientError
+from botocore.exceptions import ClientError
 import json
 import boto3
 from collections import namedtuple
@@ -129,7 +130,17 @@ def process_rtcwpro_elo(ddb_table, ddb_client, match_id, log_stream_name):
             duration = int(time_split[0]) * 60 + int(time_split[1])
         except Exception:
             duration = 600
-        winner = match["winner"]
+        if match["winner"].strip() == "":
+            if duration in [480, 600, 720]:
+                winner = "Draw"
+            else:
+                logger.warning("Elo is calculating without a winner.")
+                winner = "Draw"
+        elif duration in [480, 600, 720]:
+            logger.warning("Elo is calculating on assumption of a draw.")
+            winner = "Draw"
+        else:
+            winner = match["winner"]
     else:
         message = "Failed to retrieve match."
         logger.error(message)
@@ -186,7 +197,7 @@ def process_rtcwpro_elo(ddb_table, ddb_client, match_id, log_stream_name):
             - wstat(new_wstats, guid, "Airstrike", "kills") * .10 \
             - wstat(new_wstats, guid, "Mauser", "kills") * .30
         
-        win_multiplier = 2.5 if player_stats["team"] == winner else 1
+        win_multiplier = 1.25 if player_stats["team"] == winner else 1
         score_step_3 = int(score_step_2 * win_multiplier)
         
         player_scores[guid] = Player(score_step_3, duration, elo_games.get(guid,0)) # if elo is not there, default will be 0 anyway
