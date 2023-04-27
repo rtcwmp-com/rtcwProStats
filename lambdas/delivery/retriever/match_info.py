@@ -186,6 +186,8 @@ def infer_winners_bandaid(results, match_dict):
                         winner = "Draw"
                 elif info["round2"]["duration"] == info["round1"]["duration"] and match_dict.get(match_id + "2",{}).get("winner","abc") == match_dict.get(match_id + "1",{}).get("winner","xyz"):
                     winner = "Draw"
+                elif info["round2"]["duration"] == info["round1"]["duration"] and len(match_dict[match_id + "1"]["winner"].strip()) == 0 and info["round2"]["duration"] in [480, 600, 720]:
+                    winner = "Draw"
                 else:
                     winner = match_dict[match_id + "2"]["winner"]
             else:
@@ -211,6 +213,8 @@ def add_teamAB_maping(results, team_mapping):
             winnerAB = "TeamA"
         elif result_set["winner"] == team_mapping[match]["TeamB"]:
             winnerAB = "TeamB"
+        elif result_set["winner"] == "Draw":
+            winnerAB = "Draw"
         else:
             logger.warning("add_teamAB_maping could not determine winnerAB for match:" + match)
             winnerAB = "TeamB"
