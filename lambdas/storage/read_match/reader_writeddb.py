@@ -238,17 +238,19 @@ def ddb_prepare_wstat_items(gamestats):
             'pk'    : "wstats#" + playerguid,
             'sk'    : matchid,
             'data'  : json.dumps(player[playerguid]),
-            'ExpirationTime': int(matchid) + 60 * 60 * 24 * 31  # expire after 1 month
+            'ExpirationTime': int(matchid) + 60 * 60 * 24 * 30  # expire after 1 month
             }
         wstat_items.append(wstat_item)
     return wstat_items
 
 def ddb_prepare_wstatsall_item(gamestats):
     inject_json_version(gamestats['wstats'], gamestats)
+    matchid = gamestats["gameinfo"]["match_id"]
     wstatsall_item ={
             'pk'    : "wstatsall",
             'sk'    : gamestats["gameinfo"]["match_id"],
-            'data'  : json.dumps(gamestats['wstats'])
+            'data'  : json.dumps(gamestats['wstats']),
+            'ExpirationTime': int(matchid) + 60 * 60 * 24 * 90  # expire after 3 months
         }
     return wstatsall_item
 
