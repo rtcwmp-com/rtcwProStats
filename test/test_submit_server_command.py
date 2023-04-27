@@ -112,7 +112,7 @@ if __name__ == "__main__":
     server_json_calls = make_test_jsons(1)
 
     for i in server_json_calls:
-        i["command"] = "whois"
+        i["command"] = "last 6"
 
     for j in server_json_calls:
         print(json.dumps(j))
