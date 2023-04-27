@@ -232,6 +232,7 @@ def handler(event, context):
 
                 item_list = []
                 item_list.append({"pk": "statsall", "sk": match_id})
+                item_list.append({"pk": "wstatsall", "sk": match_id})
                 item_list.append({"pk": "match", "sk": match_id + "1"})
                 item_list.append({"pk": "match", "sk": match_id + "2"})
                 responses = get_batch_items(item_list, ddb_table, log_stream_name)
@@ -247,6 +248,8 @@ def handler(event, context):
                             data["statsall"] = json.loads(response["data"])
                             data["match_id"] = response["sk"]
                             data["type"] = response["gsi1pk"].replace("statsall#", "")
+                        if response["pk"] == "wstatsall":
+                            data["wstatsall"] = json.loads(response["data"])
                         if response["pk"] == "match":
                             match_dict[response["sk"]] = json.loads(response["data"])
 
@@ -274,7 +277,7 @@ def handler(event, context):
             #     # logic specific to /stats/{match_id} with match array
             #     if "error" not in responses:
             #         data = []
-            #         for match_stat in responses: 
+            #         for match_stat in responses:
             #             data_line = {match_stat["sk"]: json.loads(match_stat["data"])}
             #             data_line["match_id"] = match_stat["sk"]
             #             data_line["type"] = match_stat["gsi1pk"].replace("statsall#", "")
@@ -302,6 +305,22 @@ def handler(event, context):
                             data["elos"][guid][1] = 0
         else:
             data = response
+
+        pk = "groupcache#wstats"
+        wstats_response = get_item(pk, sk, ddb_table, log_stream_name)
+        if "error" not in wstats_response:
+            wstats_converted = json.loads(wstats_response["data"]).get("wstatsall", {})
+            # Although wstats_converted is the best format, to be consistent we are going to screw it up again
+            wstats_original = []
+            for guid, player_wstats in wstats_converted.items():
+                player_wstats_original = []
+                for weapon, weapon_stats in player_wstats.items():
+                    weapon_stats["weapon"] = weapon
+                    player_wstats_original.append(weapon_stats)
+                wstats_original.append({guid: player_wstats_original})
+            data["wstatsall"] = wstats_original
+        else:
+            data["wstatsall"] = {}
 
         pk = "groupawards"
         sk = group_name
@@ -1292,5 +1311,5 @@ if __name__ == "__main__":
     }
     '''
 
-    event = json.loads(event_str_eloprogress_guid)
+    event = json.loads(event_str_stats_group)
     print(handler(event, None)['body'])
