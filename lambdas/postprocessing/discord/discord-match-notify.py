@@ -112,9 +112,9 @@ def get_elo_progress_info(match_id):
 
 def send_notification(hook_url, payload):
     """Post payload to discord hook url."""
-    if __name__ == "__main__":
-        hook_url = ""
-        # print("DO NOT CHECK IN\n" * 5)
+    # if __name__ == "__main__":
+    #     hook_url = ""
+    #     # print("DO NOT CHECK IN\n" * 5)
 
     http = urllib3.PoolManager()
     response = http.request('POST', hook_url,
@@ -190,7 +190,7 @@ def build_round2_payload(match_id, server_name, ip_str, map_, time, players):
                     "name": "RTCWProAPI",
                     "icon_url": "https://rtcwpro.com/images/RtCWProVector.png"
                 },
-                "description": f"**{server_name}** posted match result after {time} minutes. [https://stats.rtcwpro.com/matches/{match_id}](https://stats.rtcwpro.com/matches/{match_id}) `\n" + content + "`",
+                "description": f"**{server_name}** posted match result after {time} minutes. Link: [{match_id}](https://stats.rtcwpro.com/matches/{match_id}) `\n" + content + "`",
                 "color": 15258703,
                 "fields": [
                     {
@@ -211,5 +211,5 @@ def build_round2_payload(match_id, server_name, ip_str, map_, time, players):
 
 if __name__ == "__main__":
     event = 1634610760
-    event = {"matchid": "1634610760", "roundid": 1}
+    event = {"matchid": "1683743160", "roundid": 2}
     handler(event, None)
