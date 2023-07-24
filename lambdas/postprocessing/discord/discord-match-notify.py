@@ -40,6 +40,19 @@ def handler(event, context):
 
     logger.info("Done.")
 
+def get_skoal():
+    """
+    Get list of players that wish not to be on ladders and personal profiles.
+    """
+    pk = "skoal"
+    sk = "v0"
+    skoal = []
+    try:
+        skoal_response = ddb_table.get_item(Key={'pk': pk, 'sk': sk})
+        skoal = json.loads(skoal_response.get('Item',{}).get("skoal", "[]"))
+    except:
+        logger.error("Could not get skoal.")
+    return skoal
 
 def notify_discord(match_id, round_id):
     """Process logic."""
@@ -87,6 +100,12 @@ def notify_discord(match_id, round_id):
             payload = build_round1_payload(match_id, server_name, ip_str, map_, time)
             send_notification(hook_url, payload)
         elif round_id == "2":
+            skoal = get_skoal()
+
+            for player in players:
+                if player[5] in skoal:
+                    players.remove(player)
+
             payload = build_round2_payload(match_id, server_name, ip_str, map_, time, players)
             send_notification(hook_url, payload)
         else:
@@ -97,13 +116,13 @@ def notify_discord(match_id, round_id):
 
 def get_elo_progress_info(match_id):
     """Get elo progress for the match."""
-    projections = "#data_value, gsi1sk, elo, performance_score, real_name"
+    projections = "#data_value, gsi1sk, elo, performance_score, real_name, pk"
     expressionAttributeNames = {'#data_value': 'data'}
     response_eloprogress = ddb_table.query(IndexName="gsi1", KeyConditionExpression=Key("gsi1pk").eq("eloprogressmatch") & Key("gsi1sk").begins_with(match_id), ProjectionExpression=projections, ExpressionAttributeNames=expressionAttributeNames)
 
     players = []
     for item in response_eloprogress["Items"]:
-        player_info = [0, item['real_name'], int(item['data']), int(item['elo']), int(item['performance_score'])]
+        player_info = [0, item['real_name'], int(item['data']), int(item['elo']), int(item['performance_score']), str(item['pk']).replace("eloprogress#", "")]
         players.append(player_info)
 
     players.sort(key=lambda x: x[3], reverse=True)
@@ -170,6 +189,7 @@ def build_round2_payload(match_id, server_name, ip_str, map_, time, players):
     headers += "ELO".ljust(colwith_4)
     # headers += "Performance score".ljust(colwith_5)
     content = headers + "\n"
+
     for index, player in enumerate(players):
         row = ""
         row += str(index + 1).ljust(colwith_1)
@@ -180,7 +200,6 @@ def build_round2_payload(match_id, server_name, ip_str, map_, time, players):
             elo_delta = str(player[2])
         row += str(elo_delta).ljust(colwith_3)
         row += str(player[3]).ljust(colwith_4)
-        # row += str(player[4]).ljust(colwith_5)
         content += row + "\n"
 
     payload = {
@@ -210,6 +229,6 @@ def build_round2_payload(match_id, server_name, ip_str, map_, time, players):
 
 
 if __name__ == "__main__":
-    event = 1634610760
-    event = {"matchid": "1683743160", "roundid": 2}
+    event = 1688868207
+    event = {"matchid": "1688868207", "roundid": 2}
     handler(event, None)
