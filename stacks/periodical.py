@@ -49,7 +49,7 @@ class PeriodicalStack(Stack):
         )
         rule.add_target(targets.LambdaFunction(classifier_lambda))
         
-        
+        # Monthly summaries
         period_grouper_role = iam.Role(self, "PeriodGroupLambdaRole",
                                    role_name='rtcwpro-lambda-period-grouper',
                                    assumed_by=iam.ServicePrincipal("lambda.amazonaws.com")
@@ -70,6 +70,28 @@ class PeriodicalStack(Stack):
             environment={
                 'RTCWPROSTATS_TABLE_NAME': ddb_table.table_name,
                 'RTCWPROSTATS_FUNNEL_STATE_MACHINE': funnel_sf.state_machine_arn,
+                'RTCWPROSTATS_CUSTOM_BUS_ARN': custom_event_bus.event_bus_arn
+            }
+        )
+
+        season_maker_role = iam.Role(self, "SeasonMakerLambdaRole",
+                                     role_name='rtcwpro-lambda-season_maker',
+                                     assumed_by=iam.ServicePrincipal("lambda.amazonaws.com")
+                                     )
+        season_maker_role.add_managed_policy(iam.ManagedPolicy.from_aws_managed_policy_name('service-role/AWSLambdaBasicExecutionRole'))
+        ddb_table.grant_read_write_data(season_maker_role)
+        custom_event_bus.grant_put_events_to(season_maker_role)
+
+        season_maker = _lambda.Function(
+            self, 'season_maker',
+            function_name='season_maker',
+            code=_lambda.Code.from_asset('lambdas/periodical/season_maker'),
+            handler='season_maker.handler',
+            runtime=_lambda.Runtime.PYTHON_3_9,
+            role=season_maker_role,
+            tracing=lambda_tracing,
+            environment={
+                'RTCWPROSTATS_TABLE_NAME': ddb_table.table_name,
                 'RTCWPROSTATS_CUSTOM_BUS_ARN': custom_event_bus.event_bus_arn
             }
         )
@@ -96,4 +118,19 @@ class PeriodicalStack(Stack):
             rule2.add_target(targets.LambdaFunction(period_grouper,
                             event=events.RuleTargetInput.from_object({"regiontype": regiontype}))
                             )
-            i +=1
+            i += 1
+
+        # Season maker
+            rule3 = events.Rule(
+                self, "SeasonRule" + str(i),
+                rule_name="season_maker" + regiontype.replace("#", ""),
+                schedule=events.Schedule.cron(
+                    month="*/3",
+                    minute='30',
+                    hour=hour,
+                    day='1'),
+            )
+            rule3.add_target(targets.LambdaFunction(season_maker,
+                                                    event=events.RuleTargetInput.from_object(
+                                                        {"regiontype": regiontype}))
+                             )
