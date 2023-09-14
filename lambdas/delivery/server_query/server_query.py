@@ -37,8 +37,18 @@ def handler(event, context):
 
     if api_path == "/serverquery":
         try:
+            hacked_request = False
             body_str = event["body"]
-            server_status = json.loads(body_str)
+            try:
+                server_status = json.loads(body_str)
+            except:
+                logger.warning("Failed to load string as is. Trying hackery.")
+                last_comma_index = body_str.rfind("},")
+                hacked_string = body_str[0:last_comma_index + 1] + "}}"
+                logger.info("New hacked_string")
+                logger.info(hacked_string)
+                server_status = json.loads(hacked_string)
+                hacked_request = True
             logger.info("Received server status")
             logger.info(server_status)
             server_status["caller_ip"] = event["headers"].get("X-Forwarded-For", "1.1.1.1")
@@ -51,17 +61,27 @@ def handler(event, context):
             elif command_tokens[0] == "test":
                 response = server_status
             elif command_tokens[0] == "whois":
-                response = prepare_whois_response(server_status, log_stream_name)
+                if len(command_tokens) > 1:
+                    logger.info("incoming param1 " + command_tokens[1])
+                    player_match_str = command_tokens[1]
+                    response = prepare_player_whois_response(server_status, player_match_str, log_stream_name,
+                                                             hacked_request)
+                else:
+                    response = prepare_whois_response(server_status, log_stream_name, hacked_request)
             elif command_tokens[0] == "last":
                 type_ = "6"
                 if len(command_tokens) > 1:
                     logger.info("incoming param1 " + command_tokens[1])
                     if command_tokens[1] in ["3", "6"]:
                         type_ = command_tokens[1]
-                response = prepare_last_match_response(server_status, type_, log_stream_name)
+                response = prepare_last_match_response(server_status, type_, log_stream_name, hacked_request)
+            elif command_tokens[0].strip() == "":
+                response = "An empty string was supplied after /api. Try /api help"
             else:
-                response = "unknown command " + command_text
+                response = "Unknown command " + command_text
         except ValueError as ex:
+            logger.info("Still failing to read json string: ")
+            logger.info(event["body"])
             logger.warning(str(ex))
             response = [str(ex)]  # this looks like json
         except Exception as ex:
@@ -70,6 +90,7 @@ def handler(event, context):
             message = "Failed to process request " + "\n" + error_msg
             exc_type, exc_value, exc_traceback = sys.exc_info()
             traceback.print_exception(exc_type, exc_value, exc_traceback, limit=5, file=sys.stdout)
+            logger.info(event["body"])
             logger.error(message)
             response = "Request failed terribly."
 
@@ -96,7 +117,7 @@ def prepare_help_response():
     return response_string
 
 
-def prepare_whois_response(server_status, log_stream_name):
+def prepare_whois_response(server_status, log_stream_name, hacked_request):
     response_2darr = []
 
     headers = ["alias", "real name", "elo", "games"]
@@ -127,12 +148,16 @@ def prepare_whois_response(server_status, log_stream_name):
         line = [col1, col2, col3, col4]
         response_2darr.append(line)
 
-    response_string = format_response(response_2darr, ["1", "2", "3", "4"], [20, 20, 6, 8], True, True)
+    response_string = format_response(response_2darr, ["1", "2", "3", "4"], [15, 15, 6, 8], True, True)
+    if hacked_request:
+        footer_str = format_response([["Request was hacked!"]], ["3"], [30], True, False)
+        response_all_json = json.loads(response_string) + json.loads(footer_str)
+        response_string = json.dumps(response_all_json)
 
     return response_string
 
 
-def prepare_last_match_response(server_status, type_, log_stream_name):
+def prepare_last_match_response(server_status, type_, log_stream_name, hacked_request):
     if "players" not in server_status:
         raise ValueError('Player list is not part of the payload.')
 
@@ -192,7 +217,82 @@ def prepare_last_match_response(server_status, type_, log_stream_name):
     response_string1 = format_response(match_headers, ["3"], [60], True, False)
     response_string2 = format_response(response_2darr, ["1", "2", "3", "4"], [20, 8, 8, 8], True, True)
     response_all_json = json.loads(response_string1) + json.loads(response_string2)
+
+    # no need for this because response does not depend on request quality
+    # if hacked_request:
+    #     footer_str = format_response([["Request was hacked!"]], ["3"], [60], True, False)
+    #     response_all_json = response_all_json + json.loads(footer_str)
+
     response_string = json.dumps(response_all_json)
+
+    cut_to_length = True
+    while cut_to_length:
+        if len(response_string) < 1024:
+            cut_to_length = False
+        else:
+            logger.warning("Response too long. Cutting")
+            response_all_json = response_all_json[0:-1]
+            response_string = json.dumps(response_all_json)
+
+    return response_string
+
+
+def prepare_player_whois_response(server_status, player_match_str, log_stream_name, hacked_request):
+    if "players" in server_status:
+        players = server_status["players"]
+    else:
+        raise ValueError('Player list is not part of the payload.')
+
+    if len(players) == 0:
+        raise ValueError('Player list is empty.')
+
+    if len(player_match_str) > 5:
+        player_match_str = player_match_str[0:5]
+
+    logger.info("Matching string to player.")
+    player_guid = None
+    for guid in players:
+        if player_match_str in players[guid]["alias"]:
+            logger.info("String matched player: " + players[guid]["alias"])
+            player_guid = guid
+            player_alias = players[guid]["alias"]
+            break
+
+    if not player_guid:
+        response_string = "Player not found"
+    else:
+        region_code = get_server_region_code(server_status.get("server_name", "no_server"))
+        response_string = player_guid
+
+        skoal = get_skoal()
+
+        if player_guid in skoal:
+            player_guid = "22b0e88467093a63d5dd979eec2631d1"
+            logger.info("Guid replaced due to being on skoal")
+
+        pk = "player" + "#" + player_guid
+
+        response = get_items_pk(pk, ddb_table, log_stream_name)
+        player_data = process_player_response(response)
+        real_name = player_data["real_name"]
+        region_type = region_code + "#6"
+        elo = player_data["elos"][region_type]["elo"]
+        games = player_data["elos"][region_type]["games"]
+        kdr = player_data["kdr"][region_type]
+        accuracy = player_data["acc"][region_type]
+        damage_ratio = round(player_data["aggstats"][region_type]["damagegiven"] / (
+                    player_data["aggstats"][region_type]["damagereceived"] + 1) * 100, 1)
+
+        rows = []
+        rows.append([f"String {player_match_str} first matched {player_alias}"])
+        rows.append([f"Real name  {real_name}"])
+        rows.append([f"Stats for {region_code} defaulting to 6v6"])
+        rows.append([f"ELO {elo} over {games} games"])
+        rows.append([f"KDR {kdr}"])
+        rows.append([f"Accuracy% {accuracy}"])
+        rows.append([f"Damage Eff% {damage_ratio}"])
+
+        response_string = format_response(rows, ["3"], [50], True, False)
 
     return response_string
 
@@ -300,6 +400,21 @@ def default_type_error_handler(obj):
     raise TypeError
 
 
+def get_skoal():
+    """
+    Get list of players that wish not to be on ladders and personal profiles.
+    """
+    pk = "skoal"
+    sk = "v0"
+    skoal = []
+    try:
+        skoal_response = get_item(pk, sk, ddb_table, "skoal_get")
+        skoal = json.loads(skoal_response.get("skoal", "[]"))
+    except:
+        logger.error("Could not get skoal.")
+    return skoal
+
+
 def get_item(pk, sk, table, log_stream_name):
     """Get one dynamodb item."""
     item_info = pk + ":" + sk + ". Logstream: " + log_stream_name
@@ -321,113 +436,6 @@ def get_items_pk(pk, table, log_stream_name):
     item_info = pk + " Logstream: " + log_stream_name
     try:
         response = table.query(KeyConditionExpression=Key('pk').eq(pk), Limit=100, ReturnConsumedCapacity='NONE')
-    except ClientError as e:
-        logger.warning("Exception occurred: " + e.response['Error']['Message'])
-        result = make_error_dict("[x] Client error calling database: ", item_info)
-    else:
-        if response['Count'] > 0:
-            result = response['Items']
-        else:
-            result = make_error_dict("[x] Items do not exist: ", item_info)
-    return result
-
-
-def get_leaders(pk, table, projection, limit, only_recent, log_stream_name):
-    """Get several items by pk."""
-    item_info = pk + " Logstream: " + log_stream_name
-
-    try:
-        response = {"Count": 0}
-        if only_recent:
-            dt = datetime.datetime.now() - datetime.timedelta(days=30)
-            dt_str = dt.isoformat()
-            response = table.query(IndexName='gsi1',
-                                   KeyConditionExpression=Key('gsi1pk').eq(pk),
-                                   ProjectionExpression=projection,
-                                   ScanIndexForward=False,
-                                   FilterExpression=Attr('updated').gt(dt_str),
-                                   Limit=limit,
-                                   ReturnConsumedCapacity='NONE')
-        if response['Count'] < 10 and limit > 0:  # results are drying up; retry once without filter
-            if only_recent:
-                logger.warning("Leaders API requirying due to low number of leaders " + pk)
-            response = table.query(IndexName='gsi1',
-                                   KeyConditionExpression=Key('gsi1pk').eq(pk),
-                                   ProjectionExpression=projection,
-                                   ScanIndexForward=False,
-                                   Limit=limit,
-                                   ReturnConsumedCapacity='NONE')
-    except ClientError as e:
-        logger.warning("Exception occurred: " + e.response['Error']['Message'])
-        result = make_error_dict("[x] Client error calling database: ", item_info)
-    else:
-        if response['Count'] > 0:
-            result = response['Items']
-        else:
-            result = make_error_dict("[x] Items do not exist: ", item_info)
-    return result
-
-
-def get_range(index_name, pk, sklow, skhigh, table, log_stream_name, limit, ascending):
-    """Get several items by pk and range of sk."""
-    item_info = pk + ":" + sklow + " to " + skhigh + ". Logstream: " + log_stream_name
-    try:
-        if index_name == "lsi":
-            response = table.query(IndexName=index_name,
-                                   KeyConditionExpression=Key('pk').eq(pk) & Key("lsipk").between(sklow, skhigh),
-                                   Limit=limit, ReturnConsumedCapacity='NONE', ScanIndexForward=ascending)
-        elif index_name == "gsi1":
-            response = table.query(IndexName=index_name,
-                                   KeyConditionExpression=Key('gsi1pk').eq(pk) & Key("gsi1sk").between(sklow, skhigh),
-                                   Limit=limit, ReturnConsumedCapacity='NONE', ScanIndexForward=ascending)
-        else:
-            response = table.query(KeyConditionExpression=Key('pk').eq(pk) & Key('sk').between(sklow, skhigh),
-                                   Limit=limit, ReturnConsumedCapacity='NONE', ScanIndexForward=ascending)
-    except ClientError as e:
-        logger.warning("Exception occurred: " + e.response['Error']['Message'])
-        result = make_error_dict("[x] Client error calling database: ", item_info)
-    else:
-        if response['Count'] > 0:
-            result = response['Items']
-        else:
-            result = make_error_dict("[x] Items do not exist: ", item_info)
-    return result
-
-
-def get_begins(pk_name, pk, begins_with, ddb_table, index_name, skname, projections, log_stream_name, limit, ascending):
-    """Get several items by pk and range of sk."""
-    item_info = pk + ": begins with " + begins_with + ". Logstream: " + log_stream_name
-    projections = projections.replace("data", "#data_value").replace("region", "#region_value")
-
-    expressionAttributeNames = {}  # knee deep
-    if '#data_value' in projections:
-        expressionAttributeNames['#data_value'] = 'data'
-    if '#region_value' in projections:
-        expressionAttributeNames['#region_value'] = 'region'
-
-    try:
-        if index_name:
-            if "_value" in projections:  # wish there was a way to not error over unuzed projection names
-                response = ddb_table.query(IndexName=index_name,
-                                           KeyConditionExpression=Key(pk_name).eq(pk) & Key(skname).begins_with(
-                                               begins_with), ProjectionExpression=projections,
-                                           ExpressionAttributeNames=expressionAttributeNames, Limit=limit,
-                                           ScanIndexForward=ascending)
-            else:
-                response = ddb_table.query(IndexName=index_name,
-                                           KeyConditionExpression=Key(pk_name).eq(pk) & Key(skname).begins_with(
-                                               begins_with), ProjectionExpression=projections, Limit=limit,
-                                           ScanIndexForward=ascending)
-        else:
-            if "_value" in projections:
-                response = ddb_table.query(
-                    KeyConditionExpression=Key(pk_name).eq(pk) & Key(skname).begins_with(begins_with),
-                    ProjectionExpression=projections, ExpressionAttributeNames=expressionAttributeNames, Limit=limit,
-                    ScanIndexForward=ascending)
-            else:
-                response = ddb_table.query(
-                    KeyConditionExpression=Key(pk_name).eq(pk) & Key(skname).begins_with(begins_with),
-                    ProjectionExpression=projections, Limit=limit, ScanIndexForward=ascending)
     except ClientError as e:
         logger.warning("Exception occurred: " + e.response['Error']['Message'])
         result = make_error_dict("[x] Client error calling database: ", item_info)
@@ -589,6 +597,11 @@ if __name__ == "__main__":
         "headers": {"X-Forwarded-For": "127.0.0.1"},
         "body": "{\"server_name\":\"Virginia RtCWPro na\",\"command\":\"whois\",\"players\":{\"b3465bff43fe40ea76f9e522d3314809\":{\"alias\":\"wolfprayer\",\"team\":\"Axis\"}}}"
     }
+    event_whois_player = {
+        "resource": "/serverquery",
+        "headers": {"X-Forwarded-For": "127.0.0.1"},
+        "body": "{\"server_name\":\"Virginia RtCWPro na\",\"command\":\"whois wolf\",\"players\":{\"b3465bff43fe40ea76f9e522d3314809\":{\"alias\":\"wolfprayer\",\"team\":\"Axis\"}}}"
+    }
     event_help = {
         "resource": "/serverquery",
         "headers": {"X-Forwarded-For": "127.0.0.1"},
@@ -600,4 +613,4 @@ if __name__ == "__main__":
         "headers": {"X-Forwarded-For": "127.0.0.1"},
         "body": "{\"server_name\":\"Virginia RtCWPro na\",\"command\":\"last 3\",\"players\":{\"b3465bff43fe40ea76f9e522d3314809\":{\"alias\":\"wolfprayer\",\"team\":\"Axis\"}}}"
     }
-    print(handler(event_last, None)['body'])
+    print(handler(event_whois_player, None)['body'])
