@@ -111,7 +111,7 @@ def prepare_help_response():
     headers = ["Available commands (type in /api command argument)"]
     response_2darr.append(headers)
     # response_2darr.append(['test', '', '', ''])
-    response_2darr.append(["whois - display player's real names and elos"])
+    response_2darr.append(["whois - display player's real names and elos. Arguments: partial string"])
     response_2darr.append(["last - display last match elo deltas. Arguments: 3 or 6"])
     response_string = format_response(response_2darr, ["3"], [60], True, True)
     return response_string
@@ -613,4 +613,4 @@ if __name__ == "__main__":
         "headers": {"X-Forwarded-For": "127.0.0.1"},
         "body": "{\"server_name\":\"Virginia RtCWPro na\",\"command\":\"last 3\",\"players\":{\"b3465bff43fe40ea76f9e522d3314809\":{\"alias\":\"wolfprayer\",\"team\":\"Axis\"}}}"
     }
-    print(handler(event_whois_player, None)['body'])
+    print(handler(event_help, None)['body'])
