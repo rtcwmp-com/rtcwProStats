@@ -310,6 +310,11 @@ def build_new_wstats_summary(wstats, wstats_old):
     for guid in wstats_old:
         if guid not in wstats_dict_new:
             wstats_dict_new[guid] = wstats_old[guid]
+            continue
+        else:
+            for weapon in wstats_old[guid]:
+                if weapon not in wstats_dict_new[guid]:
+                    wstats_dict_new[guid][weapon] = wstats_old[guid][weapon]
             
     return wstats_dict_new
         
