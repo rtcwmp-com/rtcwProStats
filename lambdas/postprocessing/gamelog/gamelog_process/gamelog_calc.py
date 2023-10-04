@@ -19,6 +19,7 @@ log_level = logging.INFO
 logging.basicConfig(format='%(name)s:%(levelname)s:%(message)s')
 logger = logging.getLogger("gamelog_calc")
 logger.setLevel(log_level)
+import time
 
 
 def process_gamelog(ddb_table, ddb_client, event_client, match_or_group_id, log_stream_name, CUSTOM_BUS):
@@ -45,6 +46,7 @@ def process_gamelog(ddb_table, ddb_client, event_client, match_or_group_id, log_
         # feed each event to a different award calculator class
         for class_ in award_classes:
             class_.process_event(rtcw_event)
+
     
     potential_achievements = {}
     awards = {}
@@ -240,6 +242,9 @@ def get_batch_items(item_list, ddb_table, log_stream_name):
             result = response["Responses"][ddb_table.name]
         else:
             result = make_error_dict("[x] Items do not exist: ", item_info)
+        
+        if len(response['UnprocessedKeys']) > 0:
+            logger.warning("gamelog_calc:get_batch_items:response:UnprocessedKeys is greated than zero")
     return result
 
 
@@ -249,10 +254,10 @@ def get_big_batch_items(big_item_list, ddb_table, log_stream_name):
     num_items = len(big_item_list)
     
     start = 0
-    batch_size = 100
+    batch_size = 10
+    batch_num = 1
     
     batches = math.ceil(num_items/batch_size) 
-    logger.info(f'Performing get_batch_items from dynamo with {num_items} items in {batches} batches.')
     
     item_list_list = []
     for i in range(1, batches+1):
@@ -261,7 +266,11 @@ def get_big_batch_items(big_item_list, ddb_table, log_stream_name):
     
     big_response = []
     for item_list in item_list_list:
+        logger.info(f'Performing get_batch_items from dynamo with {num_items} in batch {batch_num} of {batches} batches.')
         response = get_batch_items(item_list, ddb_table, log_stream_name)
+        time.sleep(1)
+        batch_num +=1
+        
         if "error" not in response:
             big_response.extend(response)
     
