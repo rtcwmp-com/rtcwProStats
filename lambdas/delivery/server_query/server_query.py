@@ -55,30 +55,44 @@ def handler(event, context):
             logger.info("Caller IP " + server_status["caller_ip"])
             command_text = server_status.get("command", "")
             command_tokens = command_text.split(" ")
+            command = command_tokens[0].lower()
             logger.info("incoming command " + command_tokens[0])
-            if command_tokens[0] == "help":
+
+            parameter1 = None
+            if len(command_tokens) > 1:
+                logger.info("incoming param1 " + command_tokens[1])
+                parameter1 = command_tokens[1].lower()
+
+            if command == "help":
                 response = prepare_help_response()
-            elif command_tokens[0] == "test":
+            elif command == "test":
                 response = server_status
-            elif command_tokens[0] == "whois":
-                if len(command_tokens) > 1:
-                    logger.info("incoming param1 " + command_tokens[1])
-                    player_match_str = command_tokens[1]
+            elif command == "whois":
+                if parameter1:
+                    logger.info("incoming param1 " + parameter1)
+                    player_match_str = parameter1
                     response = prepare_player_whois_response(server_status, player_match_str, log_stream_name,
                                                              hacked_request)
                 else:
                     response = prepare_whois_response(server_status, log_stream_name, hacked_request)
-            elif command_tokens[0] == "last":
+            elif command == "last":
                 type_ = "6"
-                if len(command_tokens) > 1:
-                    logger.info("incoming param1 " + command_tokens[1])
-                    if command_tokens[1] in ["3", "6"]:
-                        type_ = command_tokens[1]
+                if parameter1:
+                    logger.info("incoming param1 " + parameter1)
+                    if parameter1 in ["3", "6"]:
+                        type_ = parameter1
                 response = prepare_last_match_response(server_status, type_, log_stream_name, hacked_request)
-            elif command_tokens[0].strip() == "":
-                response = "An empty string was supplied after /api. Try /api help"
+            elif command == "servers":
+                region = None
+                if parameter1:
+                    logger.info("incoming param1 " + parameter1)
+                    if parameter1 in ["na", "eu", "sa"]:
+                        region = parameter1
+                response = prepare_servers_response(server_status, region, log_stream_name, hacked_request)
+            elif command.strip() == "":
+                response = ["An empty string was supplied after /api. Try /api help"]
             else:
-                response = "Unknown command " + command_text
+                response = ["Unknown command " + command_text]
         except ValueError as ex:
             logger.info("Still failing to read json string: ")
             logger.info(event["body"])
@@ -113,6 +127,7 @@ def prepare_help_response():
     # response_2darr.append(['test', '', '', ''])
     response_2darr.append(["whois - display player's real names and elos. Arguments: partial string"])
     response_2darr.append(["last - display last match elo deltas. Arguments: 3 or 6"])
+    response_2darr.append(["servers - display active servers. Arguments: na or eu or sa"])
     response_string = format_response(response_2darr, ["3"], [60], True, True)
     return response_string
 
@@ -295,6 +310,42 @@ def prepare_player_whois_response(server_status, player_match_str, log_stream_na
 
         response_string = format_response(rows, ["3"], [50], True, False)
 
+    return response_string
+
+
+def prepare_servers_response(server_status, region, log_stream_name, hacked_request):
+    if "server_name" in server_status:
+        server_name = server_status["server_name"]
+    else:
+        raise ValueError('Server is not part of the payload.')
+
+    logger.info("Looking up server name.")
+    if region:
+        region_code = region
+    else:
+        region_code = get_server_region_code(server_status.get("server_name", "no_server"))
+
+    logger.info("Looking up active servers in region: " + region_code)
+    response = get_rest_api_response("servers", {"region_code": region_code})
+    logger.info("Got response json of length " + str(len(response)))
+
+    header1 = [f"Active servers in ^1{region_code}"]
+    server_headers = [header1]
+
+    response_2darr = []
+    headers = ["IP", "Name", "Last Game"]
+    response_2darr.append(headers)
+    for server in response:
+        col1 = server.get("IP", "Ip.Not.Found")
+        col2 = server.get("server_name", "Server name not found")[0:28]
+        col3 = server.get("last_submission", "No-date")[0:10]
+        line = [col1, col2, col3]
+        response_2darr.append(line)
+
+    response_string1 = format_response(server_headers, ["3"], [60], True, False)
+    response_string2 = format_response(response_2darr, ["1", "3", "3"], [18, 30, 10], True, True)
+    response_all_json = json.loads(response_string1) + json.loads(response_string2)
+    response_string = json.dumps(response_all_json)
     return response_string
 
 
@@ -591,6 +642,27 @@ def process_eloprogress_response(response, filter_old_elos):
         data = process_eloprogress_response(response, False)
     return data
 
+def get_rest_api_response(domain, params):
+    import urllib3
+
+    base_url = "https://rtcwproapi.donkanator.com/"
+    response = []
+
+    if domain == "servers":
+        region_code = params.get("region_code", "na")
+        api_url = f"{base_url}servers/region/{region_code}/active"
+    else:
+        logger.error("Bad api domain" + str(domain))
+        return response
+
+    logger.info("Contacting url: " + api_url)
+    http = urllib3.PoolManager()
+    response_http = http.request('GET', api_url)
+    if response_http.status == 200:
+        response = json.loads(response_http.data.decode('utf-8'))  # body
+    else:
+        logger.error("Bad response status from API call " + str(response_http.status))
+    return response
 
 if __name__ == "__main__":
     event_whois = {
@@ -614,4 +686,16 @@ if __name__ == "__main__":
         "headers": {"X-Forwarded-For": "127.0.0.1"},
         "body": "{\"server_name\":\"Virginia RtCWPro na\",\"command\":\"last 3\",\"players\":{\"b3465bff43fe40ea76f9e522d3314809\":{\"alias\":\"wolfprayer\",\"team\":\"Axis\"}}}"
     }
-    print(handler(event_help, None)['body'])
+
+    event_servers_default = {
+        "resource": "/serverquery",
+        "headers": {"X-Forwarded-For": "127.0.0.1"},
+        "body": "{\"server_name\":\"Virginia RtCWPro na\",\"command\":\"servers\",\"players\":{\"b3465bff43fe40ea76f9e522d3314809\":{\"alias\":\"wolfprayer\",\"team\":\"Axis\"}}}"
+    }
+
+    event_servers_region = {
+        "resource": "/serverquery",
+        "headers": {"X-Forwarded-For": "127.0.0.1"},
+        "body": "{\"server_name\":\"Virginia RtCWPro na\",\"command\":\"servers sa\",\"players\":{\"b3465bff43fe40ea76f9e522d3314809\":{\"alias\":\"wolfprayer\",\"team\":\"Axis\"}}}"
+    }
+    handler(event_servers_region, None)
