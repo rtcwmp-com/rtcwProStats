@@ -259,7 +259,7 @@ def prepare_player_whois_response(server_status, player_match_str, log_stream_na
             break
 
     if not player_guid:
-        response_string = "Player not found"
+        response_string = ["^3Could not match anyone to ^1" + player_match_str]
     else:
         region_code = get_server_region_code(server_status.get("server_name", "no_server"))
         response_string = player_guid
@@ -274,7 +274,7 @@ def prepare_player_whois_response(server_status, player_match_str, log_stream_na
 
         response = get_items_pk(pk, ddb_table, log_stream_name)
         player_data = process_player_response(response)
-        real_name = player_data["real_name"]
+        real_name = player_data.get("real_name","noname3")
         region_type = region_code + "#6"
         elo = player_data["elos"][region_type]["elo"]
         games = player_data["elos"][region_type]["games"]
@@ -284,13 +284,14 @@ def prepare_player_whois_response(server_status, player_match_str, log_stream_na
                     player_data["aggstats"][region_type]["damagereceived"] + 1) * 100, 1)
 
         rows = []
-        rows.append([f"String {player_match_str} first matched {player_alias}"])
-        rows.append([f"Real name  {real_name}"])
-        rows.append([f"Stats for {region_code} defaulting to 6v6"])
-        rows.append([f"ELO {elo} over {games} games"])
-        rows.append([f"KDR {kdr}"])
-        rows.append([f"Accuracy% {accuracy}"])
-        rows.append([f"Damage Eff% {damage_ratio}"])
+        rows.append([f"String ^1{player_match_str} ^3matched {player_alias}"])
+        rows.append([f"Real name   : {real_name}"])
+        rows.append([f"Stats region: NA/6v6"])
+        rows.append([f"ELO         : {elo}"])
+        rows.append([f"Games       : {games}"])
+        rows.append([f"KDR         : {kdr}"])
+        rows.append([f"Acc. perc.  : {accuracy}"])
+        rows.append([f"DMG/DMR perc: {damage_ratio}"])
 
         response_string = format_response(rows, ["3"], [50], True, False)
 

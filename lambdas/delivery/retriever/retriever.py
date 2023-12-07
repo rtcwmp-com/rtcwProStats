@@ -1311,5 +1311,14 @@ if __name__ == "__main__":
     }
     '''
 
-    event = json.loads(event_str_stats_group)
+    event_str_server_all_active = '''
+        {
+          "resource": "/servers/region/{region}/active",
+          "pathParameters": {
+            "region": "na"
+          }
+        }
+    '''
+
+    event = json.loads(event_str_server_all_active)
     print(handler(event, None)['body'])
