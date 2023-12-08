@@ -12,26 +12,28 @@ log_level = logging.INFO
 logging.basicConfig(format='%(name)s:%(levelname)s:%(message)s')
 logger = logging.getLogger("group_calc")
 logger.setLevel(log_level)
-  
+
+
 def process_rtcwpro_summary(ddb_table, ddb_client, group_name, log_stream_name):
     "RTCWPro pipeline specific logic."
     t1 = _time.time()
     message = ""
-    
-    group_response = ddb_table.query(KeyConditionExpression=Key("pk").eq("group") & Key("sk").begins_with(group_name), Limit=1, ScanIndexForward=False)
-    if len(group_response.get("Items",[])) > 0:
+
+    group_response = ddb_table.query(KeyConditionExpression=Key("pk").eq("group") & Key("sk").begins_with(group_name),
+                                     Limit=1, ScanIndexForward=False)
+    if len(group_response.get("Items", [])) > 0:
         matches = json.loads(group_response["Items"][0]["data"])
-    
+
     big_item_list = []
-    big_item_list.extend(prepare_stats_item_list(matches,"statsall"))
-    big_item_list.extend(prepare_stats_item_list(matches,"wstatsall"))
+    big_item_list.extend(prepare_stats_item_list(matches, "statsall"))
+    big_item_list.extend(prepare_stats_item_list(matches, "wstatsall"))
     big_item_list.extend(prepare_matches_item_list(matches))
-    
+
     logger.info("Getting basics stats, wstats, matches for number of items: " + str(len(big_item_list)))
     responses = get_big_batch_items(big_item_list, ddb_table, log_stream_name)
     # responses = get_batch_items(item_list, ddb_table, log_stream_name)
 
-    match_dict= {}
+    match_dict = {}
     stats_dict = {}
     wstats_dict = {}
     match_region_type = ""
@@ -50,11 +52,11 @@ def process_rtcwpro_summary(ddb_table, ddb_client, group_name, log_stream_name):
         logger.error(json.dumps(response))
         message += "Error in getting stats" + response["error"]
         return message
-    
+
     new_total_stats = {}
     for match_id, stats in stats_dict.items():
         new_total_stats[match_id] = convert_stats_to_dict(stats)
-        
+
     new_total_wstats = {}
     for match_id, wstats in wstats_dict.items():
         new_wstats = {}
@@ -66,33 +68,33 @@ def process_rtcwpro_summary(ddb_table, ddb_client, group_name, log_stream_name):
                     new_wplayer[weapon_code] = weapon
                 new_wstats[wplayer_guid] = new_wplayer
         new_total_wstats[match_id] = new_wstats
-    
-    
+
     # build updated stats summaries
     stats_old = {}
     for match_id, stats in new_total_stats.items():
         stats_dict_updated = build_new_stats_summary(stats, stats_old)
         stats_old = stats_dict_updated.copy()
-    
+
     teamA, teamB, aliases, team_mapping, alias_team_str = build_teams(new_total_stats)
-    
+
     # build updated wtats summaries
-    wstats_old = {} #here we always start fresh
+    wstats_old = {}  # here we always start fresh
     for match_id, wstats in new_total_wstats.items():
         wstats_dict_updated = build_new_wstats_summary(wstats, wstats_old)
         # print(wstats_dict_updated["8ff4ecf7bd1b87edad5383efcfdb3c8d"]["MP-40"])
         wstats_old = wstats_dict_updated.copy()
     wstats_standard_response = emulate_wstats_api(wstats_dict_updated, group_name)
-    
+
     elos = get_elos(new_total_stats, ddb_table, match_region_type, log_stream_name)
     match_summary = build_new_match_summary(match_dict, team_mapping)
     classes = derive_classes(stats_dict_updated, wstats_dict_updated)
-    stats_standard_response = emulate_stats_api(stats_dict_updated, teamA, teamB, aliases, match_region_type, group_name, match_summary, elos, classes)
-    
+    stats_standard_response = emulate_stats_api(stats_dict_updated, teamA, teamB, aliases, match_region_type,
+                                                group_name, match_summary, elos, classes)
+
     group_item = ddb_prepare_group_item(group_response, alias_team_str, match_summary)
     stats_item = ddb_prepare_stat_item("stats", stats_standard_response, match_region_type, group_name)
     wstats_item = ddb_prepare_stat_item("wstats", wstats_standard_response, match_region_type, group_name)
-    
+
     # submit updated summaries
     items = []
     items.append(stats_item)
@@ -108,35 +110,37 @@ def process_rtcwpro_summary(ddb_table, ddb_client, group_name, log_stream_name):
         logger.info(message)
     else:
         message = "Group cache records inserted.\n"
-    
+
     time_to_write = str(round((_time.time() - t1), 3))
     logger.info(f"Time to process summaries is {time_to_write} s")
     message += "Group was cached"
     return message
 
+
 def get_big_batch_items(big_item_list, ddb_table, log_stream_name):
     """Get over 100 batch items."""
-    
+
     num_items = len(big_item_list)
-    
+
     start = 0
     batch_size = 100
-    
-    batches = math.ceil(num_items/batch_size) 
+
+    batches = math.ceil(num_items / batch_size)
     logger.info(f'Performing get_batch_items from dynamo with {num_items} items in {batches} batches.')
-    
+
     item_list_list = []
-    for i in range(1, batches+1):
+    for i in range(1, batches + 1):
         item_list_list.append(big_item_list[start: start + batch_size])
         start += batch_size
-    
+
     big_response = []
     for item_list in item_list_list:
         response = get_batch_items(item_list, ddb_table, log_stream_name)
         if "error" not in response:
             big_response.extend(response)
-    
+
     return big_response
+
 
 def derive_classes(stats_dict_updated, wstats_dict_updated):
     """ Figure out player classes based on their weapon usages."""
@@ -146,49 +150,55 @@ def derive_classes(stats_dict_updated, wstats_dict_updated):
         player_class_points[guid] = {}
         player_total_kills[guid] = {}
         for weapon, values in wstats.items():
-            if weapon in ["Panzer","Mauser"]:
-                player_class_points[guid][weapon] = player_class_points.get(guid,{}).get(weapon,0) + values.get("kills",0)
-                player_total_kills[guid][weapon] = player_total_kills.get(weapon,0) + values.get("kills",0)
+            if weapon in ["Panzer", "Mauser"]:
+                player_class_points[guid][weapon] = player_class_points.get(guid, {}).get(weapon, 0) + values.get(
+                    "kills", 0)
+                player_total_kills[guid][weapon] = player_total_kills.get(weapon, 0) + values.get("kills", 0)
             if weapon in ["Airstrike", "Artillery"]:
-                player_class_points[guid]["LT"] = player_class_points.get(guid,{}).get("LT",0) + values.get("shots",0)*3 # 3 points for a smoke
+                player_class_points[guid]["LT"] = player_class_points.get(guid, {}).get("LT", 0) + values.get("shots",
+                                                                                                              0) * 3  # 3 points for a smoke
             if weapon in ["Syringe"]:
-                player_class_points[guid]["Medic"] = player_class_points.get(guid,{}).get("Medic",0) + values.get("shots",0)*3  # 3 points for a poke
-    
+                player_class_points[guid]["Medic"] = player_class_points.get(guid, {}).get("Medic", 0) + values.get(
+                    "shots", 0) * 3  # 3 points for a poke
+
     for guid, stats in stats_dict_updated.items():
-        player_class_points[guid] = player_class_points.get(guid,{}) # for safety
-        player_total_kills[guid] = player_total_kills.get(guid,{}) # for safety
-        player_class_points[guid]["LT"] = player_class_points.get(guid,{}).get("LT",0) + stats.get("ammogiven",0)  # 1 point for a pack
-        player_class_points[guid]["Medic"] = player_class_points.get(guid,{}).get("Medic",0) + stats.get("healthgiven",0)  # 1 point for a schnack
-    
+        player_class_points[guid] = player_class_points.get(guid, {})  # for safety
+        player_total_kills[guid] = player_total_kills.get(guid, {})  # for safety
+        player_class_points[guid]["LT"] = player_class_points.get(guid, {}).get("LT", 0) + stats.get("ammogiven",
+                                                                                                     0)  # 1 point for a pack
+        player_class_points[guid]["Medic"] = player_class_points.get(guid, {}).get("Medic", 0) + stats.get(
+            "healthgiven", 0)  # 1 point for a schnack
+
     classes = {}
     for guid, values in player_class_points.items():
-        mauser_kills = player_total_kills.get(guid,{}).get("Mauser",1)
-        panzer_kills = player_total_kills.get(guid,{}).get("Panzer",1)
+        mauser_kills = player_total_kills.get(guid, {}).get("Mauser", 1)
+        panzer_kills = player_total_kills.get(guid, {}).get("Panzer", 1)
         mauser_kills = 1 if mauser_kills == 0 else mauser_kills
         panzer_kills = 1 if panzer_kills == 0 else panzer_kills
-        
-        if values.get("Mauser",0)/mauser_kills > .1:
+
+        if values.get("Mauser", 0) / mauser_kills > .1:
             classes[guid] = "Sniper"
-        elif values.get("LT",0) > values.get("Medic",0):
+        elif values.get("LT", 0) > values.get("Medic", 0):
             classes[guid] = "LT"
-        elif values.get("Medic",0) > values.get("LT",0):
+        elif values.get("Medic", 0) > values.get("LT", 0):
             classes[guid] = "Medic"
         else:
             classes[guid] = "Mixed"
-        
+
         # this break is intended to override sniper with panzer
-        if values.get("Panzer",0)/panzer_kills > .2:
+        if values.get("Panzer", 0) / panzer_kills > .2:
             classes[guid] = "Panzer"
     return classes
+
 
 def get_elos(new_total_stats, ddb_table, match_region_type, log_stream_name):
     big_item_list = []
     big_item_list.extend(prepare_elo_item_list(new_total_stats, match_region_type))
-    
+
     logger.info("Getting elos for number of items: " + str(len(big_item_list)))
     # responses = get_batch_items(item_list, ddb_table, log_stream_name)
     responses = get_big_batch_items(big_item_list, ddb_table, log_stream_name)
-    
+
     elos = {}
     if "error" not in responses and len(responses) > 0:
         logger.info("Got elos for number of items: " + str(len(responses)))
@@ -202,7 +212,9 @@ def get_elos(new_total_stats, ddb_table, match_region_type, log_stream_name):
         logger.error("group_cache_calc.get_elos failed to get any results back.")
     return elos
 
-def emulate_stats_api(stats_dict_updated, teamA, teamB, aliases, match_region_type, group_name, match_summary, elos, classes):
+
+def emulate_stats_api(stats_dict_updated, teamA, teamB, aliases, match_region_type, group_name, match_summary, elos,
+                      classes):
     """ Convert current wstats summary to json format consistent with raw match data."""
     response = {}
     response["statsall"] = []
@@ -211,16 +223,17 @@ def emulate_stats_api(stats_dict_updated, teamA, teamB, aliases, match_region_ty
     response["match_summary"] = match_summary
     response["elos"] = elos
     response["classes"] = classes
-    
+
     for guid, player_stat in stats_dict_updated.items():
-        
+
         team = "TeamB"
         if guid in teamA:
             team = "TeamA"
-            
+
         player_wrapper = {}
         player_wrapper[guid] = {}
-        player_wrapper[guid]["alias"] = aliases.get(guid,"name_error#")
+        player_wrapper[guid]["alias"] = aliases.get(guid, "name_error#")
+        player_wrapper[guid]["alias_colored"] = player_stat.get("alias_colored", "nope")
         player_wrapper[guid]["team"] = team
         player_wrapper[guid]["start_time"] = 0
         player_wrapper[guid]["num_rounds"] = 1
@@ -236,11 +249,11 @@ def emulate_wstats_api(wstats_dict_updated, group_name):
     response["wstatsall"] = wstats_dict_updated
     response["match_id"] = "group " + group_name
     return response
-                         
+
 
 def build_new_stats_summary(stats, stats_old):
     """Add up new and old stats."""
-    
+
     stats_dict_new = {}
     for guid in stats:
         metrics = stats[guid]["categories"]
@@ -250,37 +263,40 @@ def build_new_stats_summary(stats, stats_old):
                 stats_dict_new[guid][metric] = int(metrics[metric])
                 continue
             if metric in stats_old[guid]:
-                if metric not in ["accuracy","efficiency", "killpeak"]:
+                if metric not in ["accuracy", "efficiency", "killpeak"]:
                     stats_dict_new[guid][metric] = int(stats_old[guid][metric]) + int(metrics[metric])
             else:
                 stats_dict_new[guid][metric] = int(metrics[metric])
-        
+
         shots = 1
         if metrics["shots"] > 0:
             shots = metrics["shots"]
-        new_acc = metrics["hits"]/shots
+        new_acc = metrics["hits"] / shots
         stats_dict_new[guid]["accuracy"] = int(new_acc)
-        
+
         if stats_dict_new[guid]["kills"] + stats_dict_new[guid]["deaths"] == 0:
-            efficiency = 100*stats_dict_new[guid]["kills"]/1
-        
+            efficiency = 100 * stats_dict_new[guid]["kills"] / 1
+
         kills_plus_deaths = stats_dict_new[guid]["kills"] + stats_dict_new[guid]["deaths"]
         if kills_plus_deaths == 0:
             kills_plus_deaths = 1
-        
-        efficiency = 100*stats_dict_new[guid]["kills"]/kills_plus_deaths             
+
+        efficiency = 100 * stats_dict_new[guid]["kills"] / kills_plus_deaths
         stats_dict_new[guid]["efficiency"] = int(efficiency)
-        stats_dict_new[guid]["killpeak"] = max(stats_dict_new[guid].get("killpeak",0),metrics.get("killpeak",0))
-    
-        stats_dict_new[guid]["games"] = stats_old.get(guid,{}).get("games",0) + 1
-    
-    #re-fill untouched data from stats_old
+        stats_dict_new[guid]["killpeak"] = max(stats_dict_new[guid].get("killpeak", 0), metrics.get("killpeak", 0))
+
+        stats_dict_new[guid]["games"] = stats_old.get(guid, {}).get("games", 0) + 1
+        stats_dict_new[guid]["alias_colored"] = stats.get(guid, {}).get("alias_colored",
+                                                                        stats.get(guid, {}).get("alias", "nope1"))
+
+    # re-fill untouched data from stats_old
     for guid in stats_old:
         if guid not in stats_dict_new:
             stats_dict_new[guid] = stats_old[guid]
-    
+
     return stats_dict_new
-                    
+
+
 def build_new_wstats_summary(wstats, wstats_old):
     """Add up new and old stats."""
     wstats_dict_new = {}
@@ -293,7 +309,7 @@ def build_new_wstats_summary(wstats, wstats_old):
             for metric in metrics:
                 if metric == "weapon":
                     continue
-                #print(metric, metrics[metric])
+                # print(metric, metrics[metric])
                 if guid not in wstats_old:
                     wstats_dict_new[guid][weapon][metric] = int(metrics[metric])
                     continue
@@ -304,9 +320,9 @@ def build_new_wstats_summary(wstats, wstats_old):
                     wstats_dict_new[guid][weapon][metric] = int(wstats_old[guid][weapon][metric]) + int(metrics[metric])
                 else:
                     wstats_dict_new[guid][weapon][metric] = int(metrics[metric])
-            wstats_dict_new[guid][weapon]["games"] = wstats_old.get(guid,{}).get(weapon, {}).get("games",0) + 1
-    
-    #re-fill untouched data from stats_old
+            wstats_dict_new[guid][weapon]["games"] = wstats_old.get(guid, {}).get(weapon, {}).get("games", 0) + 1
+
+    # re-fill untouched data from stats_old
     for guid in wstats_old:
         if guid not in wstats_dict_new:
             wstats_dict_new[guid] = wstats_old[guid]
@@ -315,9 +331,9 @@ def build_new_wstats_summary(wstats, wstats_old):
             for weapon in wstats_old[guid]:
                 if weapon not in wstats_dict_new[guid]:
                     wstats_dict_new[guid][weapon] = wstats_old[guid][weapon]
-            
+
     return wstats_dict_new
-        
+
 
 def make_error_dict(message, item_info):
     """Make an error message for API gateway."""
@@ -329,7 +345,10 @@ def get_batch_items(item_list, ddb_table, log_stream_name):
     dynamodb = boto3.resource('dynamodb')
     item_info = "get_batch_items. Logstream: " + log_stream_name
     try:
-        response = dynamodb.batch_get_item(RequestItems={ddb_table.name: {'Keys': item_list, 'ProjectionExpression': 'pk, sk, #data_value, gsi1pk, real_name', 'ExpressionAttributeNames': {'#data_value': 'data'}}}, ReturnConsumedCapacity='NONE') #10 RCU 
+        response = dynamodb.batch_get_item(RequestItems={
+            ddb_table.name: {'Keys': item_list, 'ProjectionExpression': 'pk, sk, #data_value, gsi1pk, real_name',
+                             'ExpressionAttributeNames': {'#data_value': 'data'}}},
+                                           ReturnConsumedCapacity='NONE')  # 10 RCU
     except ClientError as e:
         logger.warning("Exception occurred: " + e.response['Error']['Message'])
         result = make_error_dict("[x] Client error calling database: ", item_info)
@@ -338,16 +357,18 @@ def get_batch_items(item_list, ddb_table, log_stream_name):
             result = response["Responses"][ddb_table.name]
         else:
             result = make_error_dict("[x] Items do not exist: ", item_info)
-    return result        
-        
+    return result
+
+
 def ddb_prepare_stat_item(stat_type, stats, match_region_type, group_name):
     """ Prepare an item in dynamodb format. """
     item = {
-            'pk'            : "groupcache#" + stat_type,
-            'sk'            : group_name,
-            'data'          : json.dumps(stats)
-        }
+        'pk': "groupcache#" + stat_type,
+        'sk': group_name,
+        'data': json.dumps(stats)
+    }
     return item
+
 
 def ddb_prepare_group_item(group_response, alias_team_str, match_summary):
     """Enhance group item with more info and completion stamp."""
@@ -358,7 +379,8 @@ def ddb_prepare_group_item(group_response, alias_team_str, match_summary):
     item["teams"] = alias_team_str
     item["cached"] = "Yes"
     return item
-    
+
+
 def create_batch_write_structure(table_name, items, start_num, batch_size):
     """
     Create item structure for passing to batch_write_item
@@ -368,17 +390,18 @@ def create_batch_write_structure(table_name, items, start_num, batch_size):
     :param num_items: Number of items
     :return: dictionary of tables to write to
     """
-    
+
     serializer = boto3.dynamodb.types.TypeSerializer()
-    item_batch = { table_name: []}
-    item_batch_list = items[start_num : start_num + batch_size]
+    item_batch = {table_name: []}
+    item_batch_list = items[start_num: start_num + batch_size]
     if len(item_batch_list) < 1:
         return None
     for item in item_batch_list:
-        item_serialized = {k: serializer.serialize(v) for k,v in item.items()}
+        item_serialized = {k: serializer.serialize(v) for k, v in item.items()}
         item_batch[table_name].append({'PutRequest': {'Item': item_serialized}})
-                
+
     return item_batch
+
 
 def prepare_matches_item_list(matches):
     """Make a list of matches to retrieve from ddb."""
@@ -388,12 +411,14 @@ def prepare_matches_item_list(matches):
         item_list.append({"pk": "match", "sk": str(match) + "2"})
     return item_list
 
+
 def prepare_stats_item_list(matches, pk):
     """Make a list of stats or wstats to retrieve from ddb."""
     item_list = []
     for match in matches:
         item_list.append({"pk": pk, "sk": str(match)})
     return item_list
+
 
 def prepare_elo_item_list(new_total_stats, match_region_type):
     """Make a list of stats or wstats to retrieve from ddb."""
@@ -406,68 +431,73 @@ def prepare_elo_item_list(new_total_stats, match_region_type):
                 guids.append(guid)
     return item_list
 
+
 def ddb_batch_write(client, table_name, items):
-        messages = ""
-        num_items = len(items)
-        logger.info(f'Performing ddb_batch_write to dynamo with {num_items} items.')
-        start = 0
-        batch_size = 25
-        while True:
-            # Loop adding 25 items to dynamo at a time
-            request_items = create_batch_write_structure(table_name,items, start, batch_size)
-            if not request_items:
-                break
-            try: 
-                response = client.batch_write_item(RequestItems=request_items)
-            except ClientError as err:
-                logger.error(err.response['Error']['Message'])
-                logger.error("Failed to run full batch_write_item")
-                raise
-            if len(response['UnprocessedItems']) == 0:
-                logger.info(f'Wrote a batch of about {batch_size} items to dynamo')
-            else:
-                # Hit the provisioned write limit
-                logger.warning('Hit write limit, backing off then retrying')
-                sleep_time = 5 #seconds
-                logger.warning(f"Sleeping for {sleep_time} seconds")
-                _time.sleep(sleep_time)
+    messages = ""
+    num_items = len(items)
+    logger.info(f'Performing ddb_batch_write to dynamo with {num_items} items.')
+    start = 0
+    batch_size = 25
+    while True:
+        # Loop adding 25 items to dynamo at a time
+        request_items = create_batch_write_structure(table_name, items, start, batch_size)
+        if not request_items:
+            break
+        try:
+            response = client.batch_write_item(RequestItems=request_items)
+        except ClientError as err:
+            logger.error(err.response['Error']['Message'])
+            logger.error("Failed to run full batch_write_item")
+            raise
+        if len(response['UnprocessedItems']) == 0:
+            logger.info(f'Wrote a batch of about {batch_size} items to dynamo')
+        else:
+            # Hit the provisioned write limit
+            logger.warning('Hit write limit, backing off then retrying')
+            sleep_time = 5  # seconds
+            logger.warning(f"Sleeping for {sleep_time} seconds")
+            _time.sleep(sleep_time)
 
-                # Items left over that haven't been inserted
+            # Items left over that haven't been inserted
+            unprocessed_items = response['UnprocessedItems']
+            logger.warning('Resubmitting items')
+            # Loop until unprocessed items are written
+            while len(unprocessed_items) > 0:
+                response = client.batch_write_item(RequestItems=unprocessed_items)
+                # If any items are still left over, add them to the
+                # list to be written
                 unprocessed_items = response['UnprocessedItems']
-                logger.warning('Resubmitting items')
-                # Loop until unprocessed items are written
-                while len(unprocessed_items) > 0:
-                    response = client.batch_write_item(RequestItems=unprocessed_items)
-                    # If any items are still left over, add them to the
-                    # list to be written
-                    unprocessed_items = response['UnprocessedItems']
 
-                    # If there are items left over, we could do with
-                    # sleeping some more
-                    if len(unprocessed_items) > 0:
-                        sleep_time = 5 #seconds
-                        logger.warning(f"Sleeping for {sleep_time} seconds")
-                        _time.sleep(sleep_time)
+                # If there are items left over, we could do with
+                # sleeping some more
+                if len(unprocessed_items) > 0:
+                    sleep_time = 5  # seconds
+                    logger.warning(f"Sleeping for {sleep_time} seconds")
+                    _time.sleep(sleep_time)
 
-                # Inserted all the unprocessed items, exit loop
-                logger.warning('Unprocessed items successfully inserted')
-                break
-            if response["ResponseMetadata"]['HTTPStatusCode'] != 200:
-                messages += f"\nBatch {start} returned non 200 code"
-            start += 25
-            
+            # Inserted all the unprocessed items, exit loop
+            logger.warning('Unprocessed items successfully inserted')
+            break
+        if response["ResponseMetadata"]['HTTPStatusCode'] != 200:
+            messages += f"\nBatch {start} returned non 200 code"
+        start += 25
+
+
 # print(matchinfo["match_id"].ljust(12) + matchinfo["round"].ljust(2) + matchinfo["map"].ljust(20) + matchinfo["winner"].ljust(10))
 
 
-#not used
+# not used
 def get_elo_progress(ddb_table, match_id, log_stream_name):
     """Get several items by pk and range of sk."""
     item_info = "pk: eloprogressmatch, sk: " + match_id + ". Logstream: " + log_stream_name
-    projections = projections = "#data_value, gsi1sk, elo, real_name"    
-    expressionAttributeNames = {'#data_value' : 'data'} # knee deep
+    projections = projections = "#data_value, gsi1sk, elo, real_name"
+    expressionAttributeNames = {'#data_value': 'data'}  # knee deep
 
     try:
-        response = ddb_table.query(IndexName="gsi1",KeyConditionExpression=Key("gsi1pk").eq("eloprogressmatch") & Key("gsi1sk").eq(match_id), ProjectionExpression=projections, ExpressionAttributeNames=expressionAttributeNames)
+        response = ddb_table.query(IndexName="gsi1",
+                                   KeyConditionExpression=Key("gsi1pk").eq("eloprogressmatch") & Key("gsi1sk").eq(
+                                       match_id), ProjectionExpression=projections,
+                                   ExpressionAttributeNames=expressionAttributeNames)
     except ClientError as e:
         logger.warning("Exception occurred: " + e.response['Error']['Message'])
         result = make_error_dict("[x] Client error calling database: ", item_info)
