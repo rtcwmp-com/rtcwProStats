@@ -443,12 +443,14 @@ def handler(event, context):
         projection = "pk, gsi1sk, real_name, match_id"
 
         only_recent = True
-        if category.lower() not in ["elo", "kdr", "acc"]:
-            pk = "leader#" + category + "#" + region + "#" + type_  # pound is the historical difference
-            only_recent = False
-        else:
-            pk = "leader" + category + "#" + region + "#" + type_
+        if category.lower() in ["elo", "kdr", "acc"]:
+            pk = "leader" + category + "#" + region + "#" + type_  # no pound is the historical difference
             projection += ", games"
+        else:
+            pk = "leader#" + category + "#" + region + "#" + type_
+            only_recent = False
+            if category.lower() in ["caps per game", "caps per taken", "hs ratio"]:
+                projection += ", games"
 
         response = get_leaders(pk, ddb_table, projection, limit, only_recent, log_stream_name)
         data = process_leader_response(response)
@@ -1235,7 +1237,7 @@ if __name__ == "__main__":
     {
       "resource": "/leaders/{category}/region/{region}/type/{type}",
       "pathParameters": {
-        "category": "Killpeak",
+        "category": "Caps per Taken",
         "region": "na",
         "type": "6"
       }
@@ -1301,5 +1303,5 @@ if __name__ == "__main__":
         }
     '''
 
-    event = json.loads(event_str_server_all_active)
+    event = json.loads(event_str_leader_ach)
     print(handler(event, None)['body'])
