@@ -8,6 +8,7 @@ class Achievements:
         self.get_combat_medic_lines(stats)
         self.get_combat_engineer_lines(stats)
         self.get_combat_lt_lines(stats, wstats)
+        self.get_headshot_ratios(wstats)
 
     def get_killpeak_lines(self, stats):
         """Return result as {"Award name": {"guid":"value"}}."""
@@ -108,26 +109,26 @@ class Achievements:
             
             air_support = artillery + airstrike
             
-            if  kills >= 12 and air_support >=4 and ammo_given>=8: # to skip some cycles
-                if  kills >= 30 and air_support >=10 and ammo_given>=20:
+            if kills >= 12 and air_support >= 4 and ammo_given >= 8:  # to skip some cycles
+                if kills >= 30 and air_support >= 10 and ammo_given >= 20:
                     temp_achievements[guid] = 10
                     continue
-                if  kills >= 27 and air_support >=9 and ammo_given>=18:
+                if kills >= 27 and air_support >= 9 and ammo_given >= 18:
                     temp_achievements[guid] = 9
                     continue
-                if  kills >= 24 and air_support >=8 and ammo_given>=16:
+                if kills >= 24 and air_support >= 8 and ammo_given >= 16:
                     temp_achievements[guid] = 8
                     continue
-                if  kills >= 21 and air_support >=7 and ammo_given>=14:
+                if kills >= 21 and air_support >= 7 and ammo_given >= 14:
                     temp_achievements[guid] = 7
                     continue
-                if  kills >= 18 and air_support >=6 and ammo_given>=12:
+                if kills >= 18 and air_support >= 6 and ammo_given >= 12:
                     temp_achievements[guid] = 6
                     continue
-                if  kills >= 15 and air_support >=5 and ammo_given>=10:
+                if kills >= 15 and air_support >= 5 and ammo_given >= 10:
                     temp_achievements[guid] = 5
                     continue
-                if  kills >= 12 and air_support >=4 and ammo_given>=8:
+                if kills >= 12 and air_support >= 4 and ammo_given >= 8:
                     temp_achievements[guid] = 4
                     continue
             self.potential_achievements["Lieutenant Colonel"] = temp_achievements
@@ -145,7 +146,7 @@ class Achievements:
                         headshots += wstat["headshots"]
                 hits = hits if hits > 0 else 1
                 headshot_ratio = round(headshots / hits * 100, 1)
-                if headshot_ratio > 11 and wstats.get('MP-40', {}).get("games", 0) > 10:
+                if headshot_ratio > 14 and wstats.get('MP-40', {}).get("games", 0) > 10 and hits > 96:
                     temp_achievements[guid] = headshot_ratio
             except Exception as ex:
                 print("ERROR in get_headshot_ratios. Exception" + str(ex))

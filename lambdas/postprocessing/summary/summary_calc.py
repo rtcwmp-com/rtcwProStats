@@ -12,9 +12,10 @@ log_level = logging.INFO
 logging.basicConfig(format='%(name)s:%(levelname)s:%(message)s')
 logger = logging.getLogger("summary_calc")
 logger.setLevel(log_level)
-  
+
+
 def process_rtcwpro_summary(ddb_table, ddb_client, event_client, match_id, log_stream_name, CUSTOM_BUS):
-    "RTCWPro pipeline specific logic."
+    """RTCWPro pipeline specific logic."""
     t1 = _time.time()
     sk = match_id
     message = ""
@@ -22,7 +23,7 @@ def process_rtcwpro_summary(ddb_table, ddb_client, event_client, match_id, log_s
     response = get_item("statsall", sk, ddb_table, log_stream_name)
     if "error" not in response:
         stats = json.loads(response["data"])
-        match_region_type = response['gsi1pk'].replace("statsall#","")
+        match_region_type = response['gsi1pk'].replace("statsall#", "")
         logger.info("Retrieved statsall for " + str(len(stats)) + " players")
         stats = convert_stats_to_dict(stats)
     else:
@@ -109,10 +110,14 @@ def process_rtcwpro_summary(ddb_table, ddb_client, event_client, match_id, log_s
     logger.info("Calculating aggregated wstats.")
     wstats_items = ddb_prepare_statswstats_items("wstats", wstats_dict_updated, match_region_type, real_names, games_dict)
 
+    obj_cap_pg = ddb_prepare_stats_based_items("Caps per Game", stats_dict_updated, match_region_type, real_names, games_dict)
+    obj_cap_pt = ddb_prepare_stats_based_items("Caps per Taken", stats_dict_updated, match_region_type, real_names, games_dict)
+    hs_ratio_items = ddb_prepare_stats_based_items("HS Ratio", wstats_dict_updated, match_region_type, real_names, games_dict)
+    # accuracy in leader# is adequate as is
+    # acc_items = ddb_prepare_wstats_based_items("Accuracy", wstats_dict_updated, match_region_type, real_names, games_dict)
+
     try:
         achievements_class = Achievements(stats, wstats)
-        achievements_class.get_headshot_ratios(wstats_dict_updated)
-        potential_achievements = achievements_class.potential_achievements
     except Exception as ex:
         template = "An exception of type {0} occurred. Arguments:\n{1!r}"
         error_msg = template.format(type(ex).__name__, ex.args)
@@ -120,7 +125,7 @@ def process_rtcwpro_summary(ddb_table, ddb_client, event_client, match_id, log_s
         logger.info(message)
 
     logger.info("Retrieving old achievements.")
-    potential_achievements_item_list = prepare_old_achievements_list(potential_achievements, match_region_type)
+    potential_achievements_item_list = prepare_old_achievements_list(achievements_class.potential_achievements, match_region_type)
     item_list = []
     item_list.extend(potential_achievements_item_list)
     achievments_old_response = []
@@ -130,8 +135,8 @@ def process_rtcwpro_summary(ddb_table, ddb_client, event_client, match_id, log_s
     achievements_old = {}
     if "error" in achievments_old_response:
         if "Items do not exist" not in achievments_old_response["error"]:
-             message = "Failed to retrieve old achievements for " + match_id
-             logger.error(message)   
+            message = "Failed to retrieve old achievements for " + match_id
+            logger.error(message)
         # else ok
     else:
         for achievement_item in achievments_old_response:
@@ -139,13 +144,16 @@ def process_rtcwpro_summary(ddb_table, ddb_client, event_client, match_id, log_s
             achievement_code = achievement_item["sk"].split("#")[1]
             achievements_old[guid + "#" + achievement_code] = float(achievement_item["gsi1sk"])
     
-    achievement_items = ddb_prepare_achievement_items(potential_achievements, achievements_old, real_names, player_games, match_region_type, match_id)
+    achievement_items = ddb_prepare_achievement_items(achievements_class.potential_achievements, achievements_old, real_names, player_games, match_region_type, match_id)
 
     # submit updated summaries
     items = []
     items.extend(stats_items)
     items.extend(wstats_items)
     items.extend(achievement_items)
+    items.extend(obj_cap_pg)
+    items.extend(obj_cap_pt)
+    items.extend(hs_ratio_items)
 
     try:
         ddb_batch_write(ddb_client, ddb_table.name, items)
@@ -156,9 +164,7 @@ def process_rtcwpro_summary(ddb_table, ddb_client, event_client, match_id, log_s
         logger.error(message)
     else:
         message = "Elo progress records inserted.\n"
-    
-    
-    
+
     time_to_write = str(round((_time.time() - t1), 3))
     logger.info(f"Time to process summaries is {time_to_write} s")
     message += "Records were summarized"
@@ -178,6 +184,7 @@ def process_rtcwpro_summary(ddb_table, ddb_client, event_client, match_id, log_s
         message = "No achievements to insert this time."
     
     return message
+
 
 def announce_new_achievements(achievement_items, match_region_type, CUSTOM_BUS):
     """Prepare an event about new group for discord announcement."""
@@ -202,7 +209,6 @@ def announce_new_achievements(achievement_items, match_region_type, CUSTOM_BUS):
 
             achievements[achievements_key] = achievements_value
 
-
     tmp_event = event_template.copy()
     tmp_event["Detail"] = json.dumps({"notification_type": "new achievements",
                                       "achievements": achievements,
@@ -213,8 +219,9 @@ def announce_new_achievements(achievement_items, match_region_type, CUSTOM_BUS):
         events.append(tmp_event)
     return events
 
+
 def convert_stats_to_dict(stats):
-    if len(stats) == 2 and len(stats[0]) > 1: #stats grouped in teams in a list of 2 teams , each team over 1 player
+    if len(stats) == 2 and len(stats[0]) > 1:  # stats grouped in teams in a list of 2 teams , each team over 1 player
         logger.info("Number of stats entries 2, trying to merge teams")
         stats_tmp = stats[0].copy()
         stats_tmp.update(stats[1])
@@ -225,6 +232,7 @@ def convert_stats_to_dict(stats):
             stats_tmp.update(player)
     logger.info("New statsall has " + str(len(stats_tmp)) + " players in a " + str(type(stats_tmp)))
     return stats_tmp
+
 
 def build_new_stats_summary(stats, stats_old):
     """Add up new and old stats."""
@@ -248,11 +256,11 @@ def build_new_stats_summary(stats, stats_old):
         
         efficiency = 100*stats_dict_updated[guid]["kills"]/(stats_dict_updated[guid]["kills"] + stats_dict_updated[guid]["deaths"])                
         stats_dict_updated[guid]["efficiency"] = int(efficiency)
-        stats_dict_updated[guid]["killpeak"] = max(stats_dict_updated[guid].get("killpeak",0),metrics.get("killpeak",0))
-                
-                
-        stats_dict_updated[guid]["games"] = stats_old.get(guid,{}).get("games",0) + 1
+        stats_dict_updated[guid]["killpeak"] = max(stats_dict_updated[guid].get("killpeak", 0), metrics.get("killpeak", 0))
+
+        stats_dict_updated[guid]["games"] = stats_old.get(guid, {}).get("games", 0) + 1
     return stats_dict_updated
+
 
 def build_new_wstats_summary(wstats, wstats_old):
     """Add up new and old stats."""
@@ -275,9 +283,10 @@ def build_new_wstats_summary(wstats, wstats_old):
                     wstats_dict_updated[guid][weapon][metric] = int(wstats_old[guid][weapon][metric]) + int(metrics[metric])
                 else:
                     wstats_dict_updated[guid][weapon][metric] = int(metrics[metric])
-            wstats_dict_updated[guid][weapon]["games"] = wstats_old.get(guid,{}).get(weapon, {}).get("games",0) + 1
+            wstats_dict_updated[guid][weapon]["games"] = wstats_old.get(guid, {}).get(weapon, {}).get("games", 0) + 1
     return wstats_dict_updated
-        
+
+
 def wstat(new_wstats, guid, weapon, metric):
     """Safely get a number from a deeply nested dict."""
     if guid not in new_wstats:
@@ -319,13 +328,14 @@ def prepare_playerinfo_list(stats, sk):
         item_list.append({"pk": "player#" + guid, "sk": sk})
     return item_list
 
+
 def prepare_old_achievements_list(potential_achievements, match_region_type):
     """Make a list of achievements to retrieve from ddb."""
     """Make a list of guids to retrieve from ddb."""
     item_list = []
     for achievement, achievement_items in potential_achievements.items():
         for guid, value in achievement_items.items():
-            item_list.append({"pk": "player#" + guid, "sk": "achievement#" + achievement + "#" + match_region_type,})
+            item_list.append({"pk": "player#" + guid, "sk": "achievement#" + achievement + "#" + match_region_type})
     return item_list
 
 
@@ -349,10 +359,10 @@ def get_batch_items(item_list, ddb_table, log_stream_name):
 def update_player_info_stats(ddb_table, stats_dict_updated, stats_type):
     """Does not work because missing keys like "na#6#elo throw errors."""
     # Example: ddb_table.update_item(Key=Key, UpdateExpression="set elos.#eloname = :elo, elos.#gamesname = :games", ExpressionAttributeNames={"#eloname": "na#6#elo", "#gamesname": "na#6#games"}, ExpressionAttributeValues={':elo': 134, ':games' : 135})
-    update_expression="set " + stats_type + " = :stat"
+    update_expression = "set " + stats_type + " = :stat"
     for guid, new_stat in stats_dict_updated.items():
         logger.info("Updating player " + stats_type + ": " + guid)
-        key = { "pk": "player" , "sk": "playerinfo#" + guid }
+        key = {"pk": "player", "sk": "playerinfo#" + guid}
             
         expression_values = {':stat': new_stat}
         ddb_table.update_item(Key=key, 
@@ -367,7 +377,8 @@ def ddb_prepare_statswstats_items(stat_type, dict_, match_region_type, real_name
         items.append(item)
     return items
 
-def ddb_prepare_stat_item(stat_type, guid, match_region_type, player_stat, real_names, real_games): 
+
+def ddb_prepare_stat_item(stat_type, guid, match_region_type, player_stat, real_names, real_games):
     if stat_type == "stats":
         sk = "aggstats#" + match_region_type
         gsi1pk = "leaderkdr#" + match_region_type
@@ -379,7 +390,7 @@ def ddb_prepare_stat_item(stat_type, guid, match_region_type, player_stat, real_
             logger.warning("Could not calculate KDR for guid")
             kdr = 0.0  
             games = 0
-        kdr_str = str(round(kdr,1)).zfill(3)
+        kdr_str = str(round(kdr, 1)).zfill(3)
         gsi1sk = kdr_str
         logger.debug("Setting new agg stats for " + guid + " with kdr of " + str(kdr_str))
     elif stat_type == "wstats":
@@ -392,16 +403,15 @@ def ddb_prepare_stat_item(stat_type, guid, match_region_type, player_stat, real_
             logger.warning("Could not calculate KDR for guid")
             acc = 0.0
             games = 0
-        acc_str = str(round(acc,1)).zfill(4)
+        acc_str = str(round(acc, 1)).zfill(4)
         gsi1sk = acc_str
         logger.debug("Setting new agg stats for " + guid + " with acc of " + str(acc_str))
-    
-    
+
     real_name = real_names.get(guid, "no_name#")
 
     ts = datetime.now().isoformat()
     item = {
-            'pk'            : "player"+ "#" + guid,
+            'pk'            : "player" + "#" + guid,
             'sk'            : sk,
             # 'lsipk'         : "",
             'gsi1pk'        : gsi1pk,
@@ -413,13 +423,100 @@ def ddb_prepare_stat_item(stat_type, guid, match_region_type, player_stat, real_
         }
     return item
 
+
+def ddb_prepare_stats_based_items(metric_name, dict_, match_region_type, real_names, games_dict):
+    items = []
+    for guid, stat_item in dict_.items():
+        if metric_name == "Accuracy":
+            item = ddb_prepare_stats_based_item(metric_name, guid, stat_item, match_region_type, real_names, games_dict.get(guid, 1))
+        elif metric_name == "Caps per Game":
+            item = ddb_prepare_stats_based_item(metric_name, guid, stat_item, match_region_type, real_names, games_dict.get(guid, 1))
+        elif metric_name == "Caps per Taken":
+            item = ddb_prepare_stats_based_item(metric_name, guid, stat_item, match_region_type, real_names, games_dict.get(guid, 1))
+        elif metric_name == "HS Ratio":
+            wstat_item = stat_item
+            item = ddb_prepare_wstats_based_item(metric_name, guid, wstat_item, match_region_type, real_names, games_dict.get(guid, 1))
+        else:
+            logger.warning("Unknown metric " + metric_name)
+        items.append(item)
+    return items
+
+
+def ddb_prepare_stats_based_item(metric_name, guid, stat_item, match_region_type, real_names, games_num):
+    try:
+        obj_captured = stat_item.get("obj_captured", 0)
+        obj_taken = stat_item.get("obj_taken", 0)
+        games = int(stat_item.get("games", 1))
+        if metric_name == "Caps per Game":
+            value = round(obj_captured / games * 100, 1)
+        elif metric_name == "Caps per Taken":
+            value = round(obj_captured / obj_taken * 100, 1)
+        else:
+            logger.warning("Unknown metric" + metric_name)
+            value = 0.0
+    except:
+        logger.warning("Could not calculate" + metric_name + " for guid " + guid)
+        value = 0.0
+
+    item = ddb_prepare_single_achievement_item(metric_name, guid, value, match_region_type, real_names.get(guid, "no_name#"), games_num)
+    return item
+
+
+def ddb_prepare_wstats_based_item(metric_name, guid, wstat_item, match_region_type, real_names, games_num):
+    try:
+        hits = headshots = shots = 0
+        for weapon, wstat in wstat_item.items():
+            if weapon in ['MP-40', 'Thompson', 'Sten', 'Colt', 'Luger']:
+                hits += wstat["hits"]
+                shots += wstat["shots"]
+                headshots += wstat["headshots"]
+        hits = hits if hits > 0 else 1
+        shots = shots if shots > 0 else 1
+        if metric_name == "Accuracy":
+            value = round(hits / shots * 100, 1)
+        elif metric_name == "HS Ratio":
+            value = round(headshots / hits * 100, 1)
+        else:
+            logger.warning("Unknown metric" + metric_name)
+            value = 0.0
+    except:
+        logger.warning("Could not calculate" + metric_name + " for guid " + guid)
+        value = 0.0
+
+    item = ddb_prepare_single_achievement_item(metric_name, guid, value, match_region_type, real_names.get(guid, "no_name#"), games_num)
+    return item
+
+
+def ddb_prepare_single_achievement_item(metric_name, guid, value, match_region_type, real_name, games_num):
+    sk = "achievement#" + metric_name + "#" + match_region_type
+    gsi1pk = "leader#" + metric_name + "#" + match_region_type
+
+    value_str = str(round(value, 1)).zfill(3)
+    gsi1sk = value_str
+    logger.debug("Setting new stat " + metric_name + " for " + guid + " with value of " + str(value_str))
+
+    ts = datetime.now().isoformat()
+    item = {
+            'pk': "player" + "#" + guid,
+            'sk': sk,
+            # 'lsipk'         : "",
+            'gsi1pk': gsi1pk,
+            'gsi1sk': gsi1sk,
+            # 'data'          : player_stat,
+            'games': games_num,
+            'real_name': real_name,
+            'updated': ts
+        }
+    return item
+
+
 def ddb_prepare_achievement_items(potential_achievements, achievements_old, real_names, player_games, match_region_type, match_id):
     """Figure out which potential achievements will make the cut and cast them to dynamodb format."""
     items = []
     ts = datetime.now().isoformat()
     for achievement, achievement_table in potential_achievements.items():
         for guid, player_value in achievement_table.items():
-            if float(player_value) > float(achievements_old.get(guid + "#" + achievement,0)):
+            if float(player_value) > float(achievements_old.get(guid + "#" + achievement, 0)):
                 if achievement == "Sharpshooter":
                     val = str(round(player_value, 2)).zfill(4)
                 else:
@@ -446,6 +543,7 @@ def ddb_prepare_achievement_items(potential_achievements, achievements_old, real
                 items.append(item)
     return items
 
+
 def calculate_accuracy(player_stat):
     try:
         hits = shots = 0
@@ -459,23 +557,24 @@ def calculate_accuracy(player_stat):
         acc = 0.0
     return acc
 
+
 def create_batch_write_structure(table_name, items, start_num, batch_size):
     """
     Create item structure for passing to batch_write_item
     :param table_name: DynamoDB table name
     :param items: large collection of items
     :param start_num: Start index
-    :param num_items: Number of items
+    :param batch_size: Number of items
     :return: dictionary of tables to write to
     """
     
     serializer = boto3.dynamodb.types.TypeSerializer()
-    item_batch = { table_name: []}
+    item_batch = {table_name: []}
     item_batch_list = items[start_num : start_num + batch_size]
     if len(item_batch_list) < 1:
         return None
     for item in item_batch_list:
-        item_serialized = {k: serializer.serialize(v) for k,v in item.items()}
+        item_serialized = {k: serializer.serialize(v) for k, v in item.items()}
         item_batch[table_name].append({'PutRequest': {'Item': item_serialized}})
                 
     return item_batch
@@ -489,7 +588,7 @@ def ddb_batch_write(client, table_name, items):
     batch_size = 25
     while True:
         # Loop adding 25 items to dynamo at a time
-        request_items = create_batch_write_structure(table_name,items, start, batch_size)
+        request_items = create_batch_write_structure(table_name, items, start, batch_size)
         if not request_items:
             break
         try: 
@@ -503,7 +602,7 @@ def ddb_batch_write(client, table_name, items):
         else:
             # Hit the provisioned write limit
             logger.warning('Hit write limit, backing off then retrying')
-            sleep_time = 5 #seconds
+            sleep_time = 5  # seconds
             logger.warning(f"Sleeping for {sleep_time} seconds")
             _time.sleep(sleep_time)
 
@@ -520,7 +619,7 @@ def ddb_batch_write(client, table_name, items):
                 # If there are items left over, we could do with
                 # sleeping some more
                 if len(unprocessed_items) > 0:
-                    sleep_time = 5 #seconds
+                    sleep_time = 5  # seconds
                     logger.warning(f"Sleeping for {sleep_time} seconds")
                     _time.sleep(sleep_time)
 
