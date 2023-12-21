@@ -235,6 +235,8 @@ def handler(event, context):
                 item_list.append({"pk": "wstatsall", "sk": match_id})
                 item_list.append({"pk": "match", "sk": match_id + "1"})
                 item_list.append({"pk": "match", "sk": match_id + "2"})
+                item_list.append({"pk": "gamelogs", "sk": match_id + "1"})
+                item_list.append({"pk": "gamelogs", "sk": match_id + "2"})
                 responses = get_batch_items(item_list, ddb_table, log_stream_name)
 
                 # logic specific to /stats/{match_id}
@@ -243,6 +245,7 @@ def handler(event, context):
                 else:
                     data = {}
                     match_dict = {}
+                    gamelog_dict = {}
                     for response in responses:
                         if response["pk"] == "statsall":
                             data["statsall"] = json.loads(response["data"])
@@ -252,6 +255,8 @@ def handler(event, context):
                             data["wstatsall"] = json.loads(response["data"])
                         if response["pk"] == "match":
                             match_dict[response["sk"]] = json.loads(response["data"])
+                        if response["pk"] == "gamelogs":
+                            gamelog_dict[response["sk"]] = json.loads(response["data"])
 
                     new_total_stats = {}
                     new_total_stats[match_id] = convert_stats_to_dict(data["statsall"])
@@ -259,31 +264,7 @@ def handler(event, context):
                     teamA, teamB, aliases, team_mapping, alias_team_str = build_teams(new_total_stats)
                     match_summary = build_new_match_summary(match_dict, team_mapping)
                     data["match_summary"] = match_summary
-
-            # if len(match_id.split(','))>1:
-            #     matches = match_id.split(",")
-            #     item_list = []
-            #     match_dups = []
-            #     for match in matches:
-            #         if match.isnumeric() and int(match) > 1006210516:  # rtcw release
-            #             if match in match_dups:
-            #                 logger.warning("Matches query string contains duplicate values. Dropping duplicates.")
-            #                 continue
-            #             item_list.append({"pk": "statsall", "sk": match})
-            #             match_dups.append(match)
-
-            #     responses = get_batch_items(item_list, ddb_table, log_stream_name)
-
-            #     # logic specific to /stats/{match_id} with match array
-            #     if "error" not in responses:
-            #         data = []
-            #         for match_stat in responses:
-            #             data_line = {match_stat["sk"]: json.loads(match_stat["data"])}
-            #             data_line["match_id"] = match_stat["sk"]
-            #             data_line["type"] = match_stat["gsi1pk"].replace("statsall#", "")
-            #             data.append(data_line)
-            #     else:
-            #         data = responses
+                    data["gamelog"] = gamelog_dict
 
     if api_path == "/stats/group/{group_name}":
         logger.info("Processing " + api_path)
