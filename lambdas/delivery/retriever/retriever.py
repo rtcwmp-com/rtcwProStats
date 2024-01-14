@@ -203,6 +203,7 @@ def handler(event, context):
                 type_ = event["pathParameters"]["type"]
                 logger.info("Parameter: " + guid + " " + region + " " + type_)
                 pk = "stats#" + region + "#" + type_ + "#" + guid
+
                 responses = get_range("gsi1", pk, str(sklow), str(skhigh), ddb_table, log_stream_name, 40, False)
             else:
                 logger.info("Parameter: " + guid)
@@ -413,36 +414,62 @@ def handler(event, context):
                 player_guid = "22b0e88467093a63d5dd979eec2631d1"
                 logger.info("Guid replaced due to being on skoal")
 
+            pk_hist = None
             if api_path == "/player/{player_guid}":
                 pk = "player" + "#" + player_guid
-                pk_fake = "nothing"
 
             if api_path == "/player/{player_guid}/season/{season_id}":
-                season_id = event["pathParameters"]["season_id"]
+                season = event["pathParameters"]["season_id"]
                 pk = "player" + "#" + player_guid
-                pk_fake = "player#" + player_guid + "#season#" + season_id
+                pk_hist = season + "#" + pk
 
             response = get_items_pk(pk, ddb_table, log_stream_name)
             data = process_player_response(response)
-            data["pk_fake"] = pk_fake
 
-    if api_path == "/leaders/{category}/region/{region}/type/{type}" or api_path == "/leaders/{category}/region/{region}/type/{type}/limit/{limit}":
+            if pk_hist:
+                response_hist = get_items_pk(pk_hist, ddb_table, log_stream_name)
+                data_hist = process_player_response(response_hist)
+
+                if "error" in data_hist:
+                    data = make_error_dict("Season data not found", pk_hist)
+                else:
+                    delete_blank_keys = []
+                    for k, v in data_hist.items():
+                        if len(v) == 0:
+                            delete_blank_keys.append(k)
+                    for k in delete_blank_keys:
+                        del data_hist[k]
+
+                data.update(data_hist)
+
+
+    if api_path == "/leaders/{category}/region/{region}/type/{type}" or \
+       api_path == "/leaders/{category}/region/{region}/type/{type}/limit/{limit}" or \
+       api_path == "/leadershist/season/{season}/category/{category}/region/{region}/type/{type}/limit/{limit}":
         logger.info("Processing " + api_path)
 
         category = urllib.parse.unquote(event["pathParameters"]["category"])
         region = event["pathParameters"]["region"]
         type_ = event["pathParameters"]["type"]
 
-        if api_path == "/leaders/{category}/region/{region}/type/{type}/limit/{limit}":
+        season = "current"
+        if "season" in event["pathParameters"]:
+            season = event["pathParameters"]["season"]
+
+        if "limit" in event["pathParameters"]:
             limit = int(event["pathParameters"]["limit"])
         else:
             limit = 50
 
-        logger.info("Parameters: " + category + " " + region + " " + type_)
+        logger.info("Parameters: " + season + " " + category + " " + region + " " + type_)
 
         projection = "pk, gsi1sk, real_name, match_id"
 
-        only_recent = True
+        if season == "current":
+            only_recent = True
+        else:
+            only_recent = False
+
         if category.lower() in ["elo", "kdr", "acc"]:
             pk = "leader" + category + "#" + region + "#" + type_  # no pound is the historical difference
             projection += ", games"
@@ -452,8 +479,11 @@ def handler(event, context):
             if category.lower() in ["caps per game", "caps per taken", "hs ratio"]:
                 projection += ", games"
 
+        if season != "current":
+            pk = season + "#" + pk
+
         response = get_leaders(pk, ddb_table, projection, limit, only_recent, log_stream_name)
-        data = process_leader_response(response)
+        data = process_leader_response(response, season)
 
     if api_path == "/eloprogress/player/{player_guid}/region/{region}/type/{type}":
         logger.info("Processing " + api_path)
@@ -999,7 +1029,7 @@ def process_player_response(response):
     return data
 
 
-def process_leader_response(response):
+def process_leader_response(response, season):
     skoal = get_skoal()
     data = []
     if "error" in response:
@@ -1008,6 +1038,9 @@ def process_leader_response(response):
         try:
             for item in response:
                 leader_line = {}
+                if season != "current":
+                    item['pk'] = item['pk'].replace(season + "#", "")
+                    # item['gsi1pk'] = item['gsi1pk'].replace(season + "#", "")
                 leader_line['real_name'] = item.get("real_name", "no_name#")
                 leader_line['value'] = float(item["gsi1sk"])
                 leader_line['guid'] = item["pk"].split("#")[1]
@@ -1050,7 +1083,7 @@ def process_eloprogress_response(response, filter_old_elos):
             if len(response) > 0:
                 if "pk" in response[0]:
                     item_info = item["pk"]
-            data = make_error_dict("Could not process leader response.", item_info)
+            data = make_error_dict("Could not process elo progress response.", item_info)
             logger.error(data["error"])
     if filter_old_elos and len(data) == 0:
         data = process_eloprogress_response(response, False)
@@ -1233,6 +1266,19 @@ if __name__ == "__main__":
     }
     '''
 
+    event_str_leaderhist = '''
+    {
+      "resource": "/leadershist/season/{season}/category/{category}/region/{region}/type/{type}/limit/{limit}",
+      "pathParameters": {
+        "season": "Season002",
+        "category": "kdr",
+        "region": "eu",
+        "type": "3",
+        "limit": "5"
+      }
+    }
+    '''
+
     event_str_leader_ach = '''
     {
       "resource": "/leaders/{category}/region/{region}/type/{type}",
@@ -1303,5 +1349,5 @@ if __name__ == "__main__":
         }
     '''
 
-    event = json.loads(event_str_leader_ach)
+    event = json.loads(event_str_leaderhist)
     print(handler(event, None)['body'])

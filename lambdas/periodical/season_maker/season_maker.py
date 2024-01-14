@@ -22,7 +22,7 @@ if __name__ == "__main__":
     TABLE_NAME = "rtcwprostats-database-DDBTable2F2A2F95-1BCIOU7IE3DSE"
     print("\n\n\nSet state machine and custom bus values in console\n\n\n")
     # MATCH_STATE_MACHINE = ""
-    # CUSTOM_BUS = ""
+    CUSTOM_BUS = ""
 else:
     TABLE_NAME = os.environ['RTCWPROSTATS_TABLE_NAME']
     MATCH_STATE_MACHINE = os.environ['RTCWPROSTATS_FUNNEL_STATE_MACHINE']
@@ -41,8 +41,7 @@ def handler(event, context):
     region_match_type = event["regiontype"]
 
     try:
-        i = 1
-        # process_new_season(region_match_type)
+        process_new_season(region_match_type)
     except Exception as ex:
         print(type(ex).__name__)
         print(ex.args)
@@ -58,15 +57,28 @@ def handler(event, context):
 
 def process_new_season(region_match_type):
     logger.info("Starting the new season sequence.")
-    old_season_name = get_season_name()
-    player_metrics = copy_current_metrics_to_archive(old_season_name, region_match_type)
-    delete_current_metrics(player_metrics)
+    old_season = get_season_name()
+    logger.info("Old season was " + old_season)
+    player_metrics = get_current_metrics(region_match_type)
+    logger.info("Retrieved " + str(len(player_metrics)) + " metrics for " + region_match_type)
+
+    logger.info("Copying current metrics to old season")
+    copy_current_metrics_to_archive(player_metrics, old_season, region_match_type)
+    logger.info("Copied successfully.")
+
+    logger.info("Deleting current season metrics.")
+    delete_items = delete_current_metrics_items(player_metrics)
+    logger.info("Will delete items: " + str(len(delete_items)))
+    delete_ddb_items(delete_items)
+    logger.info("Deleted current season metrics successfully.")
+
     logger.info("Created a new season successfully.")
 
     logger.info("Sending notification to discord.")
-    events = announce_new_season(old_season_name, region_match_type)
-    post_custom_bus_event(event_client, events)
+    events = announce_new_season(old_season, region_match_type)
+    # post_custom_bus_event(event_client, events)
     logger.info("Sent notification to discord.")
+
 
 def get_season_name():
     logger.info("Getting the new season name.")
@@ -74,32 +86,27 @@ def get_season_name():
     logger.info("Got the new season name: " + old_season_name)
     return old_season_name
 
-def copy_current_metrics_to_archive(old_season, region_match_type):
-    logger.info("Retrieving current metrics for " + region_match_type)
+
+def copy_current_metrics_to_archive(player_metrics, old_season, region_match_type):
     try:
-        player_metrics = get_current_metrics(region_match_type)
         copy_current_metrics(player_metrics, old_season, region_match_type)
     except Exception as ex:
         message = "Failed to copy current metrics for " + region_match_type + "\n"
         logger.error(message)
         raise
-    return player_metrics
 
 
-def delete_current_metrics(player_metrics):
-    logger.info("Deleting current metrics.")
+def delete_current_metrics_items(player_metrics):
     delete_keys = []
     for player_metric in player_metrics:
         delete_keys.append({"pk": player_metric["pk"], "sk": player_metric["sk"]})
-    print("These items will be deleted")
-    print(json.dumps(delete_keys))
-    logger.info("Deletion complete.")
+    return delete_keys
 
 
 def get_current_metrics(region_match_type):
     logger.info("Getting current metrics for " + region_match_type)
     player_metrics = []
-    categories = ["acc", "kdr", "acc", "Sharpshooter"]
+    categories = ["acc", "kdr", "HS Ratio"]
     for category in categories:
         leaders_category = get_leaders(category, region_match_type)
         player_metrics.extend(leaders_category)
@@ -120,6 +127,19 @@ def get_leaders(category, region_match_type):
     return response["Items"]
 
 
+def delete_ddb_items(delete_items):
+    try:
+        with ddb_table.batch_writer() as batch:
+            for item in delete_items:
+                if item["pk"] == "player#fb5568dc74c6c5087b7a56a0e55bd321":
+                    batch.delete_item(Key=item)
+    except Exception as ex:
+        template = "An exception of type {0} occurred. Arguments:\n{1!r}"
+        error_msg = template.format(type(ex).__name__, ex.args)
+        message = "Failed to delete batch of items. Error " + error_msg
+        logger.warning(message)
+
+
 def copy_current_metrics(player_metrics, old_season, region_match_type):
     logger.info("Copying current metrics.")
     new_player_metrics = []
@@ -129,10 +149,12 @@ def copy_current_metrics(player_metrics, old_season, region_match_type):
         new_item["pk"] = old_season + "#" + new_item["pk"]
         # sk stays the same
         new_item["gsi1pk"] = old_season + "#" + new_item["gsi1pk"]
-        # sk stays the same
+        # gsi1sk stays the same
         # clear gsi2
-        new_item["gsi2pk"] = ""
-        new_item["gsi2sk"] = ""
+        if "gsi2pk" in new_item:
+            del new_item["gsi2pk"]
+        if "gsi2sk" in new_item:
+            del new_item["gsi2sk"]
         new_player_metrics.append(new_item)
     try:
         ddb_batch_write(ddb_client, ddb_table.name, new_player_metrics)
@@ -142,8 +164,6 @@ def copy_current_metrics(player_metrics, old_season, region_match_type):
         message = "Failed to insert player metrics to archive " + old_season + "#" + region_match_type + "\n" + error_msg
         logger.error(message)
         raise
-
-    logger.info("Copied current metrics.")
 
 
 def announce_new_season(old_season_name, region_match_type):
@@ -171,7 +191,7 @@ def create_batch_write_structure(table_name, items, start_num, batch_size):
     :param table_name: DynamoDB table name
     :param items: large collection of items
     :param start_num: Start index
-    :param num_items: Number of items
+    :param batch_size: Number of items
     :return: dictionary of tables to write to
     """
 

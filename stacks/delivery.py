@@ -72,7 +72,7 @@ class DeliveryStack(Stack):
         player_info = player.add_resource("{player_guid}")
         player_info.add_method("GET", retriever_integration)
 
-        player_info_season= player_info.add_resource("season").add_resource("{season_id}")
+        player_info_season = player_info.add_resource("season").add_resource("{season_id}")
         player_info_season.add_method("GET", retriever_integration)
         
         #20
@@ -116,6 +116,10 @@ class DeliveryStack(Stack):
         #51
         leaders_cat_region_name_type_name_limit = leaders_cat_region_name_type_name.add_resource("limit").add_resource("{limit}")
         leaders_cat_region_name_type_name_limit.add_method("GET", retriever_integration)
+
+        # 55
+        leaders_hist = api.root.add_resource("leadershist").add_resource("season").add_resource("{season}").add_resource("category").add_resource("{category}").add_resource("region").add_resource("{region}").add_resource("type").add_resource("{type}").add_resource("limit").add_resource("{limit}")
+        leaders_hist.add_method("GET", retriever_integration)
         
         #60
         eloprogress = api.root.add_resource("eloprogress")

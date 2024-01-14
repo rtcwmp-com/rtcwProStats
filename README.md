@@ -43,40 +43,42 @@ Important difference to keep in mind - matches and gamelogs are identified by {m
 The following APIs are available at the time of writing this documentation:
 x is done , / is work in progress, blank is planned
 
-|Status  |Domain  |API Path  |Query  |
-|-------- |-------- |-------- |--------|
-|[x] |Matches |/matches/{match_round_id_1},{match_round_id_N} |Get match info(s) |
-|[x] |Matches |/matches/type/{region}/{type} |Filter type of matches by region (sa na eu, unk) and type(3,6,6plus) |
-|[x] |Matches |/matches/recent |Filter by last 30 days to get matches |
-|[x] |Matches |/matches/health/{region}/{type} | Get match health stats for periods of time  |
-|[x] |Matches |/matches/recent/{days} |Filter by last x days to get recent matches |
-|[x] |Matches |/matches/server/{begins_with} |Get 100 recent matches from a server |
-|[x] |Gamelog |/gamelogs/{match_round_id} |Retrieve game log for a match |
-|[x] |Stats   |/stats/player/{guid} |Filter stats for a player guid from many matches |
-|[x] |Stats   |/stats/player/{player_guid}/region/{region}/type/{type} |Filter stats for a player/region/type |
-|[x] |Stats   |/stats/{matchid} |Filter stats for a match or range of matches |
-|[x] |Weapons |/wstats/{matchid} |By match retrieve all wstats |
-|[x] |Weapons |/wstats/player/{player_guid}/match/{matchid} |By player by match |
-|[x] |Weapons |/wstats/player/{player_guid} |By player by several matches |
-|[x] |Players |/player/{player_guid} |Filter by given guid to get player info |
-|[x] |Players |/player/search/{begins_with} |Search for real names that start with a string |
-|[x] |Servers |/servers |Get list of all servers with stats |
-|[x] |Servers |/servers/detail |Same, but with details |
-|[x] |Servers |/servers/region/{region} | Get server list by region |
-|[x] |Servers |/servers/region/{region}/active |Same, but with 30 days since last submission |
-|[x] |Groups  |/groups/add (POST)| Add a group of matches|
-|[x] |Groups  |/groups/group_name/{begins_with} |Get groups that begin with partial word|
-|[x] |Groups  |/groups/region/{region}|Get groups that were marked with a region|
-|[x] |Groups  |/groups/region/{region}/type/{type}|Get groups that were marked with a region and type|
-|[x] |Groups  |/groups/region/{region}/type/{type}/group_name/{begins_with}|...and partial name|
-|[x] |Leaders |/leaders/{category}/region/{region}/type/{type}/limit/{limit}| Leaderboards. Categories:elo, kdr, acc|
-|[x] |Elo prog.|/eloprogress/match/{match_id}| Elo progress for players in a given match|
-|[x] |Elo prog.|/eloprogress/player/{player_guid}/region/{region}/type/{type}| Elo progress for a player|
-|[x] |Aliases  |/aliases/search/{begins_with}| Get guids for partial alias match|
-|[x] |Aliases  |/aliases/player/{player_guid}| Get aliases for a player|
-|[x] |Aliases  |/aliases/recent/limit/{limit}| Get last x seen aliases |
-|[x] |Events  |/events/{limit}| Get last x pipeline events |
-
+|Status  | Domain     | API Path                                                                                  | Query                                                                |
+|-------- |------------|-------------------------------------------------------------------------------------------|----------------------------------------------------------------------|
+|[x] | Matches    | /matches/{match_round_id_1},{match_round_id_N}                                            | Get match info(s)                                                    |
+|[x] | Matches    | /matches/type/{region}/{type}                                                             | Filter type of matches by region (sa na eu, unk) and type(3,6,6plus) |
+|[x] | Matches    | /matches/recent                                                                           | Filter by last 30 days to get matches                                |
+|[x] | Matches    | /matches/health/{region}/{type}                                                           | Get match health stats for periods of time                           |
+|[x] | Matches    | /matches/recent/{days}                                                                    | Filter by last x days to get recent matches                          |
+|[x] | Matches    | /matches/server/{begins_with}                                                             | Get 100 recent matches from a server                                 |
+|[x] | Gamelog    | /gamelogs/{match_round_id}                                                                | Retrieve game log for a match                                        |
+|[x] | Stats      | /stats/player/{guid}                                                                      | Filter stats for a player guid from many matches                     |
+|[x] | Stats      | /stats/player/{player_guid}/region/{region}/type/{type}                                   | Filter stats for a player/region/type                                |
+|[x] | Stats      | /stats/{matchid}                                                                          | Filter stats for a match or range of matches                         |
+|[x] | Weapons    | /wstats/{matchid}                                                                         | By match retrieve all wstats                                         |
+|[x] | Weapons    | /wstats/player/{player_guid}/match/{matchid}                                              | By player by match                                                   |
+|[x] | Weapons    | /wstats/player/{player_guid}                                                              | By player by several matches                                         |
+|[x] | Players    | /player/{player_guid}                                                                     | Filter by given guid to get player info                              |
+|[x] | Players    | /player/{player_guid}/season/{season_id}                                                  | Filter by given guid and season to get player info                   |
+|[x] | Players    | /player/search/{begins_with}                                                              | Search for real names that start with a string                       |
+|[x] | Servers    | /servers                                                                                  | Get list of all servers with stats                                   |
+|[x] | Servers    | /servers/detail                                                                           | Same, but with details                                               |
+|[x] | Servers    | /servers/region/{region}                                                                  | Get server list by region                                            |
+|[x] | Servers    | /servers/region/{region}/active                                                           | Same, but with 30 days since last submission                         |
+|[x] | Groups     | /groups/add (POST)                                                                        | Add a group of matches                                               |
+|[x] | Groups     | /groups/group_name/{begins_with}                                                          | Get groups that begin with partial word                              |
+|[x] | Groups     | /groups/region/{region}                                                                   | Get groups that were marked with a region                            |
+|[x] | Groups     | /groups/region/{region}/type/{type}                                                       | Get groups that were marked with a region and type                   |
+|[x] | Groups     | /groups/region/{region}/type/{type}/group_name/{begins_with}                              | ...and partial name                                                  |
+|[x] | Leaders    | /leaders/{category}/region/{region}/type/{type}/limit/{limit}                             | Leaderboards. Categories:elo, kdr, etc                               |
+|[x] | Leaders    | /leadershist/season/{season}/category/{category}/region/{region}/type/{type}/limit/{limit} | Leaderboard history. Categories:kdr, acc, HS Ratio                   |
+|[x] | Elo prog.  | /eloprogress/match/{match_id}                                                             | Elo progress for players in a given match                            |
+|[x] | Elo prog.  | /eloprogress/player/{player_guid}/region/{region}/type/{type}                             | Elo progress for a player                                            |
+|[x] | Aliases    | /aliases/search/{begins_with}                                                             | Get guids for partial alias match                                    |
+|[x] | Aliases    | /aliases/player/{player_guid}                                                             | Get aliases for a player                                             |
+|[x] | Aliases    | /aliases/recent/limit/{limit}                                                             | Get last x seen aliases                                              |
+|[x] | Events     | /events/{limit}                                                                           | Get last x pipeline events                                           |
+|[x] | Server API | /serverquery                                                                         | server way of talking to the system                                  |
 
 Example:
 
@@ -287,4 +289,7 @@ If you are an API consumer, please do your part:
 * add: monthly automatic groups with a month worth of activity
 * add: /events/{limit} api resource
 * add: /matches/health/na/6 api
-
+* add: /serverquery
+* fix: statsall and wstatsall data throttling
+* add: /leadershist/season/{season}/category/{category}/region/{region}/type/{type}/limit/{limit}
+* add: /player/{player_guid}/season/{season_id}

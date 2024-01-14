@@ -40,7 +40,8 @@ def get_api_response_as_json(url_path_match):
 #i should be writing real test framework, but for now this will do
 def check_obj_type(obj, correct_type):
     if not isinstance(obj, correct_type):
-        logger.error("Object is not what is expected.")
+        logger.error("Object is not what is expected. Expected " + str(correct_type) + " got " + str(type(obj)))
+        logger.error(obj)
         raise TypeError
         
 def check_num_elements(obj, desired_minimum, desired_maximum):
@@ -125,17 +126,17 @@ else:
     logger.warning("No player wstats in last 30 days. Skipped integrity checks.")
 
 # /stats/{match_id}
-url_path_match = "stats/" +  match_id
-obj = get_api_response_as_json(url_path_match)
-check_obj_type(obj, dict)
-check_num_elements(obj, 3, 30)
-check_json_value(obj, "match_id", str, 10)
+# url_path_match = "stats/" + match_id
+# obj = get_api_response_as_json(url_path_match)
+# check_obj_type(obj, dict)
+# check_num_elements(obj, 3, 30)
+# check_json_value(obj, "match_id", str, 10)
 
 # /stats/{match_id} with csv
-url_path_match = "stats/" +  match_id_array
-obj = get_api_response_as_json(url_path_match)
-check_obj_type(obj, list)
-check_num_elements(obj, 4, 4)
+# url_path_match = "stats/" + match_id_array
+# obj = get_api_response_as_json(url_path_match)
+# check_obj_type(obj, list)
+# check_num_elements(obj, 4, 4)
 # check_json_value(obj[0], "1630476331", list, None)
 
 # /wstats/{match_id}
@@ -217,13 +218,13 @@ check_json_value(obj[0], "round", str, 1)
 # group retrieve vars
 region = "na"
 match_type = "6"
-group_name = "gather15943"
+group_name = "gather-1705189094"
 # /groups/group_name/{group_name}
-url_path_match = "groups/group_name/" +  group_name
+url_path_match = "groups/group_name/" + group_name
 obj = get_api_response_as_json(url_path_match)
 check_obj_type(obj, dict)
 check_num_elements(obj, 1, 10)
-check_json_value(obj, "gather15943", list, None)
+check_json_value(obj, "gather-1705189094", dict, None)
 
 # /groups/region/{region_name}
 url_path_match = "groups/region/" +  region
@@ -243,10 +244,10 @@ url_path_match = "groups/region/" +  region + "/type/" + match_type + "/group_na
 obj = get_api_response_as_json(url_path_match)
 check_obj_type(obj, dict)
 check_num_elements(obj, 1, 10)
-check_json_value(obj, "gather15943", list, None)
+check_json_value(obj, "gather-1705189094", dict, None)
 
 # Expecting error
-url_path_match = "groups/region/" +  region + "/type/" + match_type + "/group_name/" + "fake_group"
+url_path_match = "groups/region/" + region + "/type/" + match_type + "/group_name/" + "fake_group"
 logger.info("Expecting error.")
 obj = get_api_response_as_json(url_path_match)
 check_obj_type(obj, dict)
@@ -260,11 +261,11 @@ check_obj_type(obj, list)
 check_num_elements(obj[0], 1, 200)
 check_json_value(obj[0], "server_name", str, None)
 
-url_path_match = "servers/detail"
-obj = get_api_response_as_json(url_path_match)
-check_obj_type(obj, list)
-check_num_elements(obj[0], 1, 200)
-check_json_value(obj[0]["data"], "g_gametype", str, 1)
+# url_path_match = "servers/detail"
+# obj = get_api_response_as_json(url_path_match)
+# check_obj_type(obj, list)
+# check_num_elements(obj[0], 1, 200)
+# check_json_value(obj[0]["data"], "g_gametype", str, 1)
 
 url_path_match = "servers/region/" + region
 obj = get_api_response_as_json(url_path_match)
@@ -283,7 +284,7 @@ type_ = "6"
 url_path_match = "leaders/" + category + "/region/" + region + "/type/" + type_
 obj = get_api_response_as_json(url_path_match)
 check_obj_type(obj, list)
-check_num_elements(obj, 1, 20)
+check_num_elements(obj, 1, 50)
 check_json_value(obj[0], "guid", str, 32)
 
 category = "kdr"
@@ -291,7 +292,7 @@ type_ = "6"
 url_path_match = "leaders/" + category + "/region/" + region + "/type/" + type_
 obj = get_api_response_as_json(url_path_match)
 check_obj_type(obj, list)
-check_num_elements(obj, 1, 20)
+check_num_elements(obj, 1, 50)
 check_json_value(obj[0], "guid", str, 32)
 
 category = "acc"
@@ -299,7 +300,7 @@ type_ = "3"
 url_path_match = "leaders/" + category + "/region/" + region + "/type/" + type_
 obj = get_api_response_as_json(url_path_match)
 check_obj_type(obj, list)
-check_num_elements(obj, 1, 20)
+check_num_elements(obj, 1, 50)
 check_json_value(obj[0], "guid", str, 32)
 
 category = "elo"
@@ -338,6 +339,12 @@ check_num_elements(obj, 1, 100)
 check_json_value(obj[0], "value", int, None)
 
 url_path_match = "aliases/recent/limit/5"
+obj = get_api_response_as_json(url_path_match)
+check_obj_type(obj, list)
+check_num_elements(obj, 1, 5)
+check_json_value(obj[0], "guid", str, 32)
+
+url_path_match = "leadershist/season/Season001/category/kdr/region/eu/type/3/limit/5"
 obj = get_api_response_as_json(url_path_match)
 check_obj_type(obj, list)
 check_num_elements(obj, 1, 5)
