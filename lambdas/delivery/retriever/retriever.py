@@ -506,6 +506,26 @@ def handler(event, context):
                               limit, ascending)
         data = process_eloprogress_response(response, True)
 
+    if api_path == "/seasons/region/{region}/type/{type}":
+        logger.info("Processing " + api_path)
+
+        region = event["pathParameters"]["region"]
+        type_ = event["pathParameters"]["type"]
+        limit = 100
+
+        logger.info("Parameters: " + region + " " + type_)
+
+        pk_name = "pk"
+        pk = "season"
+        index_name = "lsi"
+        skname = "lsipk"
+        begins_with = region + "#" + type_ + "#"
+        ascending = False
+        projections = "season_name, lsipk, sk, player_number"
+        response = get_begins(pk_name, pk, begins_with, ddb_table, index_name, skname, projections, log_stream_name,
+                              limit, ascending)
+        data = process_seasons_response(response)
+
     if api_path == "/eloprogress/match/{match_id}":
         logger.info("Processing " + api_path)
 
@@ -947,6 +967,21 @@ def process_event_responses(api_path, responses):
     return data
 
 
+def process_seasons_response(response):
+    if "error" not in response:
+        data = []
+        for season_line in response:
+            season = {}
+            season["end_date"] = season_line["lsipk"].split("#")[2]
+            season["season_prefix"] = season_line["sk"].split("#")[2]
+            season["season_name"] = season_line["season_name"]
+            season["player_number"] = season_line["player_number"]
+            data.append(season)
+    else:
+        data = response
+    return data
+
+
 def process_group_responses(responses):
     if "error" in responses:
         data = responses
@@ -1349,5 +1384,15 @@ if __name__ == "__main__":
         }
     '''
 
-    event = json.loads(event_str_leaderhist)
+    event_str_seasons = '''
+            {
+              "resource": "/seasons/region/{region}/type/{type}",
+              "pathParameters": {
+                "region": "unk",
+                "type": "3"
+              }
+            }
+        '''
+
+    event = json.loads(event_str_seasons)
     print(handler(event, None)['body'])

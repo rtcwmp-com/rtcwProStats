@@ -45,7 +45,7 @@ def get_hook_url(event):
         match_type = event['detail']['match_type']
 
     sk = ""
-    if event['detail']['notification_type'] in ['new player', 'new server', "new group", "new achievements"]:
+    if event['detail']['notification_type'] in ['new player', 'new server', "new group", "new achievements", "season complete"]:
         sk = match_type + "#default"
 
     try:
@@ -73,6 +73,8 @@ def build_discord_message(event):
         payload = build_new_group_payload(event)
     if event["detail"]["notification_type"] == "new achievements":
         payload = build_new_achievements_payload(event)
+    if event["detail"]["notification_type"] == "season complete":
+        payload = build_season_payload(event)
 
     if not payload:
         raise ValueError("No content was created.")
@@ -137,6 +139,25 @@ def build_new_group_payload(event):
     link = "https://stats.rtcwpro.com/groups/" + urllib.parse.quote(group_name)
     discord_message = "New group had been created - **" + group_name + "**\n" + \
         f"Link: [{group_name}]({link})"
+
+    payload = {
+        "embeds": [
+            {
+                "author": {
+                    "name": "RTCWProAPI",
+                    "icon_url": "https://rtcwpro.com/images/RtCWProVector.png"
+                },
+                "description": discord_message
+            }]
+    }
+    return payload
+
+
+def build_season_payload(event):
+    """Create a message about a new group."""
+    old_season_name = event["detail"]["old_season_name"]
+    match_type = event["detail"]["match_type"]
+    discord_message = "Past season data for **" + match_type + "** had been archived as - **" + old_season_name + "**"
 
     payload = {
         "embeds": [

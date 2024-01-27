@@ -1,4 +1,4 @@
-from aws_cdk import Stack
+from aws_cdk import Stack, Duration
 from constructs import Construct
 
 import aws_cdk.aws_lambda as _lambda
@@ -67,6 +67,7 @@ class PeriodicalStack(Stack):
             runtime=_lambda.Runtime.PYTHON_3_8,
             role=period_grouper_role,
             tracing=lambda_tracing,
+            timeout=Duration.seconds(60),
             environment={
                 'RTCWPROSTATS_TABLE_NAME': ddb_table.table_name,
                 'RTCWPROSTATS_FUNNEL_STATE_MACHINE': funnel_sf.state_machine_arn,
@@ -90,6 +91,7 @@ class PeriodicalStack(Stack):
             runtime=_lambda.Runtime.PYTHON_3_9,
             role=season_maker_role,
             tracing=lambda_tracing,
+            timeout=Duration.seconds(60),
             environment={
                 'RTCWPROSTATS_TABLE_NAME': ddb_table.table_name,
                 'RTCWPROSTATS_CUSTOM_BUS_ARN': custom_event_bus.event_bus_arn
