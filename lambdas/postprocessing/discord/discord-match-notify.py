@@ -81,14 +81,10 @@ def notify_discord(match_id, round_id):
 
         time = round((int(data_json["round_end"]) - int(data_json["match_id"])) / 60, 1)
 
-        logger.info("Looking for hook info on " + match_type + "#" + server_name)
-        response_hook = ddb_table.get_item(Key={'pk': "discordhook", 'sk': match_type + "#" + server_name})
-        if "Item" in response_hook:
-            logger.info("Got hook info on " + match_type + "#" + server_name)
-        else:
-            logger.info("Got NO hook info on " + match_type + "#" + server_name)
-        hook_url = response_hook.get("Item", {}).get("discordhook", None)
-        hook_active = response_hook.get("Item", {}).get("hookactive", "no")
+        hook_active, hook_url = get_discord_hook(ddb_table, match_type, server_name)
+        if not hook_url:
+            hook_active, hook_url = get_discord_hook(ddb_table, match_type, "default")
+        
     except Exception as ex:
         template = "An exception of type {0} occurred. Arguments:\n{1!r}"
         error_msg = template.format(type(ex).__name__, ex.args)
@@ -113,6 +109,19 @@ def notify_discord(match_id, round_id):
     else:
         logger.info("Hook is not active or not found.")
 
+def get_discord_hook(ddb_table, match_type, server_name):
+    logger.info("Looking for hook info on " + match_type + "#" + server_name)
+    response_hook = ddb_table.get_item(Key={'pk': "discordhook", 'sk': match_type + "#" + server_name})
+    hook_url = None
+    hook_active = "no"
+    
+    if "Item" in response_hook:
+        logger.info("Got hook info on " + match_type + "#" + server_name)
+        hook_url = response_hook["Item"].get("discordhook", None)
+        hook_active = response_hook["Item"].get("hookactive", "no")
+    else:
+        logger.info("Got NO hook info on " + match_type + "#" + server_name)
+    return hook_active, hook_url
 
 def get_elo_progress_info(match_id):
     """Get elo progress for the match."""
