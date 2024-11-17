@@ -1,7 +1,11 @@
+import math
+
 import boto3
 import logging
-from boto3.dynamodb.conditions import Key, Attr
+from boto3.dynamodb.conditions import Key
 import json
+import csv
+import datetime
 
 TABLE_NAME = "rtcwprostats-database-DDBTable2F2A2F95-1BCIOU7IE3DSE"
 
@@ -16,53 +20,59 @@ logger.setLevel(log_level)
 
 log_stream_name = "local"
 
-def get_stats_per_match_collection(matches, period):
+
+def get_stats_per_match_collection(matches):
     match_ids = {}
 
     for match in matches["Items"]:
         match_ids[match['lsipk'].split("#")[2][0:-1]] = 1
 
-
     item_list = []
     for match in match_ids:
         item_list.append({"pk": "wstatsall", "sk": match})
 
-    wstats_response_1 = dynamodb.batch_get_item(RequestItems={ddb_table.name: {'Keys': item_list[0:100]}})
-    wstats_response_2 = dynamodb.batch_get_item(RequestItems={ddb_table.name: {'Keys': item_list[100:]}})
+    chunks = int(len(item_list) / 100) + 1
 
-    wstats_response = []
-    wstats_response.extend(wstats_response_1["Responses"]["rtcwprostats-database-DDBTable2F2A2F95-1BCIOU7IE3DSE"])
-    wstats_response.extend(wstats_response_2["Responses"]["rtcwprostats-database-DDBTable2F2A2F95-1BCIOU7IE3DSE"])
+    wstats_responses = []
+    for chunk in range(chunks):
+        range_low = chunk*100
+        range_high = (chunk+1)*100
+        print("querying wstats chunks", range_low, range_high)
+        wstats_response = dynamodb.batch_get_item(RequestItems={ddb_table.name: {'Keys': item_list[range_low:range_high]}})
+        wstats_responses.extend(wstats_response["Responses"]["rtcwprostats-database-DDBTable2F2A2F95-1BCIOU7IE3DSE"])
+
+    print("Processing all wstats of length:", len(wstats_responses))
+    unique_guids = []
+    real_name_items = []
+    for wstats in wstats_responses:
+        for player in json.loads(wstats["data"]):
+            for player_guid in player:
+                if player_guid not in unique_guids:
+                    unique_guids.append(player_guid)
+                    real_name_items.append({"pk": "player#" + player_guid, "sk": "realname"})
+    names_response = dynamodb.batch_get_item(RequestItems={ddb_table.name: {'Keys': real_name_items, 'ProjectionExpression': 'pk, gsi1sk'}})
+
+    name_dict = {}
+    for name_item in names_response["Responses"]["rtcwprostats-database-DDBTable2F2A2F95-1BCIOU7IE3DSE"]:
+        name_dict[name_item['pk'][7:]] = name_item['gsi1sk'][9:]
 
     players = []
-    for wstats in wstats_response:
+    for wstats in wstats_responses:
         for player in json.loads(wstats["data"]):
             for player_guid, player_weapons in player.items():
                 for weapon in player_weapons:
-                    if weapon["weapon"] in ["MP-40","Thompson"]:
-                        players.append([period, player_guid, weapon["weapon"], weapon["hits"], weapon["shots"], weapon["headshots"]])
+                    if weapon["weapon"] in ["MP-40", "Thompson"]:
+                        players.append([datetime.datetime.fromtimestamp(int(wstats['sk'])).strftime('%Y-%m-%d %H:%M:%S'), wstats['sk'], player_guid, name_dict[player_guid], weapon["weapon"], weapon["hits"], weapon["shots"], weapon["headshots"]])
 
     return players
 
-matches_1 = ddb_table.query(IndexName='lsi', KeyConditionExpression=Key('pk').eq("match") & Key("lsipk").between("eu#6#1675209600", "eu#6#1676160000")) # 2/1 0am to 2/12 0am
-matches_2 = ddb_table.query(IndexName='lsi', KeyConditionExpression=Key('pk').eq("match") & Key("lsipk").between("eu#6#1676678400", "eu#6#1677628500")) # 2/18 0am to 2/28 23:55
-players_1 = get_stats_per_match_collection(matches_1, "first")
-players_2 = get_stats_per_match_collection(matches_2, "second")
 
-players_all = players_1 + players_2
+matches = ddb_table.query(IndexName='lsi', KeyConditionExpression=Key('pk').eq("match") & Key("lsipk").between("na#6#1704067200", "na#6#1717200000"))
+players = get_stats_per_match_collection(matches)
 
-import csv
 with open('players.csv', 'w', newline='') as file:
     writer = csv.writer(file)
 
-    writer.writerow(["period","guid","weapon","hits","shots","headshots"])
-    for player in players_all:
+    writer.writerow(["datetime", "match", "guid", "name", "weapon", "hits", "shots", "headshots"])
+    for player in players:
         writer.writerow(player)
-
-
-
-
-
-
-
-
