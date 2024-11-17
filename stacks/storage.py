@@ -19,8 +19,8 @@ class StorageStack(Stack):
                                    bucket_name="rtcwprostats",
                                    versioned=True,
                                    encryption=s3.BucketEncryption.S3_MANAGED,
-                                   # block_public_access=s3.BlockPublicAccess.BLOCK_ALL,
                                    public_read_access=True,
+                                   block_public_access=s3.BlockPublicAccess(block_public_acls=False,restrict_public_buckets=False,ignore_public_acls=False,block_public_policy=False),
                                    removal_policy=RemovalPolicy.RETAIN,
                                    lifecycle_rules=[
                                        s3.LifecycleRule(id="ExpireDebugFiles", expiration=Duration.days(30), prefix="debug/"),
