@@ -152,7 +152,7 @@ def infer_winners_bandaid(results, match_dict):
                       "te_adlernest_b1", "te_cipher_b5", "te_delivery_b1", "te_escape2", "te_frostbite", "te_ufo",
                       "sub2_b7", "sub2_b8", "mp_rocket", "mp_castle", "sw_tram_b2"]
     offense_axis = ["tram2_b3", "tram2_b4", "mp_assault", "mp_ice", "te_kungfugrip", "te_redue_b5", "te_redue_b5",
-                    "te_redue_b6"]
+                    "te_redue_b6", "te_operation_b4"]
     
     for match_id, info in results.items():
         winner = "Draw"
