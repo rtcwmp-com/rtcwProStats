@@ -174,7 +174,7 @@ def ddb_prepare_stats_items(gamestats):
                 'data'  : json.dumps(stat),
                 'gsi2pk': "playermap",
                 'gsi2sk': gamestats["gameinfo"].get("map", "unk") + "#" + playerguid + "#" + matchid,
-                'ExpirationTime': int(matchid) + 60 * 60 * 24 * 92  # expire after 3 months
+                'ExpirationTime': int(matchid) + 60 * 60 * 24 * 730  # expire after 2 years
              }
             print(stats_item)
             if playerguid in duplicates_check:
