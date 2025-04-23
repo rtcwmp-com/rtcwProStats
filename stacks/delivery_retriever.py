@@ -20,6 +20,18 @@ class DeliveryRetrieverStack(Stack):
                                   )
         retriever_role.add_managed_policy(
             iam.ManagedPolicy.from_aws_managed_policy_name('service-role/AWSLambdaBasicExecutionRole'))
+        retriever_role.add_to_policy(iam.PolicyStatement(
+            resources=["*"],
+            actions=[
+                "bedrock:InvokeModel",
+                "bedrock:ListInvocations",
+                "bedrock:ListSessions",
+                "bedrock:GetSession",
+                "bedrock:RenderPrompt",
+                "bedrock:CreateInvocation",
+                "bedrock:CreateSession"
+            ],
+        ))
 
         retriever = _lambda.Function(
             self, 'retriever',

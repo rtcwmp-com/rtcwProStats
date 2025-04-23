@@ -7,7 +7,8 @@ from aws_cdk.aws_dynamodb import (
     AttributeType,
     BillingMode,
     TableEncryption,
-    ProjectionType
+    ProjectionType,
+    PointInTimeRecoverySpecification
 )
 
 
@@ -22,7 +23,9 @@ class DatabaseStack(Stack):
             partition_key=Attribute(name="pk", type=AttributeType.STRING),
             sort_key=Attribute(name="sk", type=AttributeType.STRING),
             billing_mode=BillingMode.PAY_PER_REQUEST,
-            point_in_time_recovery=True,
+            point_in_time_recovery_specification=PointInTimeRecoverySpecification(
+                point_in_time_recovery_enabled=True
+            ),
             encryption=TableEncryption.AWS_MANAGED,
             removal_policy=RemovalPolicy.RETAIN,
             time_to_live_attribute="ExpirationTime"
