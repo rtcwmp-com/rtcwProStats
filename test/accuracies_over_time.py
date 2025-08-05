@@ -67,7 +67,7 @@ def get_stats_per_match_collection(matches):
     return players
 
 
-matches = ddb_table.query(IndexName='lsi', KeyConditionExpression=Key('pk').eq("match") & Key("lsipk").between("na#6#1704067200", "na#6#1717200000"))
+matches = ddb_table.query(IndexName='lsi', KeyConditionExpression=Key('pk').eq("match") & Key("lsipk").between("na#6#1735689600", "na#6#1743705313"))
 players = get_stats_per_match_collection(matches)
 
 with open('players.csv', 'w', newline='') as file:
