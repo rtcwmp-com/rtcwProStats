@@ -27,7 +27,8 @@ from stacks.settings import (
     enable_tracing,
     dns_resource_name,
     hosted_zone_id,
-    zone_name
+    zone_name,
+    prompt_id
 )
 
 def print_cdk_tree(construct_, level=0):
@@ -67,6 +68,8 @@ gamelog_lambda_stack = GamelogLambdaStack(app, "rtcwprostats-gamelog",
 task_funnel_stack = TaskFunnelStack(app, "rtcwprostats-taskfunnel", lambda_tracing=lambda_tracing,
                                     ddb_table=database.ddb_table,
                                     gamelog_lambda = gamelog_lambda_stack.gamelog_lambda,
+                                    custom_event_bus=custom_bus_stack.custom_bus,
+                                    prompt_id=prompt_id,
                                     env=env)
 
 post_process_stack = PostProcessStack(app, "rtcwprostats-postprocess", 
