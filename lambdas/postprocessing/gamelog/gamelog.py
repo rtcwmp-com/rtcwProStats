@@ -49,7 +49,7 @@ def handler(event, context):
         message = "Award processing finished for " + str(match_or_group_id)
         logger.info(message)
         
-    return {"Final Message" : message}
+    return {"group_name": json.dumps(match_or_group_id)}
 
 if __name__ == "__main__":
     event = 1644787304

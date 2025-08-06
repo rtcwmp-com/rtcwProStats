@@ -45,7 +45,7 @@ def get_hook_url(event):
         match_type = event['detail']['match_type']
 
     sk = ""
-    if event['detail']['notification_type'] in ['new player', 'new server', "new group", "new achievements", "season complete"]:
+    if event['detail']['notification_type'] in ['new player', 'new server', "new group", "new achievements", "season complete", "group ai summary"]:
         sk = match_type + "#default"
 
     try:
@@ -75,6 +75,8 @@ def build_discord_message(event):
         payload = build_new_achievements_payload(event)
     if event["detail"]["notification_type"] == "season complete":
         payload = build_season_payload(event)
+    if event["detail"]["notification_type"] == "group ai summary":
+        payload = build_group_ai_sumary_payload(event)
 
     if not payload:
         raise ValueError("No content was created.")
@@ -113,6 +115,24 @@ def build_new_achievements_payload(event):
             }]
     }
     return payload
+
+def build_group_ai_sumary_payload(event):
+    """Create a message about a new group created by AI."""
+    group_summary = event["detail"]["group_summary"]
+    discord_message = group_summary
+
+    payload = {
+        "embeds": [
+            {
+                "author": {
+                    "name": "RTCWProAPI",
+                    "icon_url": "https://rtcwpro.com/images/RtCWProVector.png"
+                },
+                "description": discord_message
+            }]
+    }
+    return payload
+
 
 def build_new_user_payload(event):
     """Create a message about a new user."""
@@ -230,5 +250,13 @@ if __name__ == "__main__":
                                          "match_type": "test#6"
                                          },
                               }
-    event = event_new_achievements
+    
+    event_new_aisummary= {'source': 'rtcwpro-pipeline',
+                              'detail-type': 'Discord notification',
+                              'detail': {"notification_type": "group ai summary", 
+                                         "group_summary": "top kek test",
+                                         "match_type": "test#6"
+                                         },
+                              }
+    event = event_new_aisummary
     handler(event, None)

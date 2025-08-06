@@ -3,6 +3,7 @@ import json
 import boto3
 from boto3.dynamodb.conditions import Attr, Key
 from botocore.exceptions import ClientError
+import botocore.config
 import logging
 import os
 import decimal
@@ -89,6 +90,10 @@ def handler(event, context):
                     if parameter1 in ["na", "eu", "sa"]:
                         region = parameter1
                 response = prepare_servers_response(server_status, region, log_stream_name, hacked_request)
+            elif command == "ai":
+                question = " ".join(command_tokens[1:])
+                logger.info("incoming AI question: " + question)
+                response = [call_managed_prompt(question)]
             elif command.strip() == "":
                 response = ["An empty string was supplied after /api. Try /api help"]
             else:
@@ -128,6 +133,7 @@ def prepare_help_response():
     response_2darr.append(["whois - display player's real names and elos. Arguments: partial string"])
     response_2darr.append(["last - display last match elo deltas. Arguments: 3 or 6"])
     response_2darr.append(["servers - display active servers. Arguments: na or eu or sa"])
+    response_2darr.append(["ai - send a question to AI. Arguments - text_with_underscores"])
     response_string = format_response(response_2darr, ["3"], [60], True, True)
     return response_string
 
@@ -664,6 +670,33 @@ def get_rest_api_response(domain, params):
         logger.error("Bad response status from API call " + str(response_http.status))
     return response
 
+
+def call_managed_prompt(question):
+    model_id = "arn:aws:bedrock:us-east-1:793070529856:prompt/FDDU5BIOUF:5"
+    bedrock_runtime = boto3.client('bedrock-runtime', region_name="us-east-1",
+                                   config=botocore.config.Config(read_timeout=30, retries={'max_attempts': 1}))
+    body = {"promptVariables":{"query":{"text":question.replace("_", " ")}}}  # TODO: maybe next versions of RTCW server will allow more than 2 tokens
+    response = bedrock_runtime.invoke_model(
+        body=json.dumps(body),
+        modelId=model_id,
+        accept="application/json",
+        contentType="application/json"
+    )
+
+    response_content = response.get('body').read().decode('utf-8')
+    response_data = json.loads(response_content)
+    response_answer = response_data["output"]["message"]["content"][0]["text"]
+
+    finish_reason = response_data.get("error")
+
+    if finish_reason is not None:
+        raise Exception(f"Text generation error. Error is {finish_reason}")
+
+    logger.info("Successfully generated text with model %s", model_id)
+    response_safe = ''.join(e for e in response_answer if e.isalnum() or e == " ")
+    return response_safe
+
+
 if __name__ == "__main__":
     event_whois = {
         "resource": "/serverquery",
@@ -698,4 +731,10 @@ if __name__ == "__main__":
         "headers": {"X-Forwarded-For": "127.0.0.1"},
         "body": "{\"server_name\":\"Virginia RtCWPro na\",\"command\":\"servers sa\",\"players\":{\"b3465bff43fe40ea76f9e522d3314809\":{\"alias\":\"wolfprayer\",\"team\":\"Axis\"}}}"
     }
-    handler(event_servers_region, None)
+
+    event_ai = {
+        "resource": "/serverquery",
+        "headers": {"X-Forwarded-For": "127.0.0.1"},
+        "body": "{\"server_name\":\"Virginia RtCWPro na\",\"command\":\"ai who is john mullins\",\"players\":{\"b3465bff43fe40ea76f9e522d3314809\":{\"alias\":\"wolfprayer\",\"team\":\"Axis\"}}}"
+    }
+    handler(event_ai, None)
