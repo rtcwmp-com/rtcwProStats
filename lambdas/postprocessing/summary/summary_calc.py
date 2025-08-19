@@ -254,7 +254,12 @@ def build_new_stats_summary(stats, stats_old):
         new_acc = metrics["hits"]/shots
         stats_dict_updated[guid]["accuracy"] = int(new_acc)
         
-        efficiency = 100*stats_dict_updated[guid]["kills"]/(stats_dict_updated[guid]["kills"] + stats_dict_updated[guid]["deaths"])                
+        kills_and_deaths = (stats_dict_updated[guid]["kills"] + stats_dict_updated[guid]["deaths"])
+        if kills_and_deaths == 0:
+            efficiency = 0
+        else:
+            efficiency = 100*stats_dict_updated[guid]["kills"]/kills_and_deaths
+            
         stats_dict_updated[guid]["efficiency"] = int(efficiency)
         stats_dict_updated[guid]["killpeak"] = max(stats_dict_updated[guid].get("killpeak", 0), metrics.get("killpeak", 0))
 
