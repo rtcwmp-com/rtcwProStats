@@ -649,6 +649,79 @@ def handler(event, context):
                                limit, ascending)
         data = process_event_responses(api_path, responses)
 
+    if api_path == "/mapstats/region/{region}/type/{type}/player/{player_guid}":
+        logger.info("Processing " + api_path)
+        if "player_guid" in event["pathParameters"] and "region" in event["pathParameters"] and "type" in event["pathParameters"]:
+            player_guid = event["pathParameters"]["player_guid"]
+            region = event["pathParameters"]["region"]
+            type_ = event["pathParameters"]["type"]
+            logger.info("Parameters: " + player_guid + " " + region + " " + type_)
+            
+            pk = "maps#" + player_guid
+            begins_with = region + "#" + type_
+            pk_name = "pk"
+            index_name = None
+            skname = "sk"
+            projections = "pk, sk, games, wins, draw, losses, total_duration, real_name"
+            limit = 100
+            ascending = False
+            
+            responses = get_begins(pk_name, pk, begins_with, ddb_table, index_name, skname, projections, log_stream_name, limit, ascending)
+            
+            if "error" not in responses:
+                data = []
+                for line in responses:
+                    map_data = {}
+                    pk_parts = line["pk"].split("#")
+                    sk_parts = line["sk"].split("#") 
+                    map_data["guid"] = pk_parts[1]
+                    map_data["map"] = sk_parts[2]
+                    map_data["games"] = int(line.get("games", 0))
+                    map_data["wins"] = int(line.get("wins", 0))
+                    map_data["draw"] = int(line.get("draw", 0))
+                    map_data["losses"] = int(line.get("losses", 0))
+                    map_data["total_duration"] = int(line.get("total_duration", 0))
+                    map_data["real_name"] = line.get("real_name", "")
+                    data.append(map_data)
+            else:
+                data = responses
+
+    if api_path == "/mapstats/region/{region}/type/{type}/all":
+        logger.info("Processing " + api_path)
+        if "region" in event["pathParameters"] and "type" in event["pathParameters"]:
+            region = event["pathParameters"]["region"]
+            type_ = event["pathParameters"]["type"]
+            logger.info("Parameters: " + region + " " + type_)
+            
+            pk = "maps"
+            begins_with = region + "#" + type_
+            pk_name = "gsi1pk"
+            index_name = "gsi1"
+            skname = "gsi1sk"
+            projections = "pk, sk, gsi1sk, games, wins, draw, losses, total_duration, real_name"
+            limit = 1000
+            ascending = False
+            
+            responses = get_begins(pk_name, pk, begins_with, ddb_table, index_name, skname, projections, log_stream_name, limit, ascending)
+            
+            if "error" not in responses:
+                data = []
+                for line in responses:
+                    map_data = {}
+                    pk_parts = line["pk"].split("#")
+                    sk_parts = line["gsi1sk"].split("#") 
+                    map_data["guid"] = pk_parts[1]
+                    map_data["map"] = sk_parts[2] if len(sk_parts) > 2 else ""
+                    map_data["games"] = int(line.get("games", 0))
+                    map_data["wins"] = int(line.get("wins", 0))
+                    map_data["draw"] = int(line.get("draw", 0))
+                    map_data["losses"] = int(line.get("losses", 0))
+                    map_data["total_duration"] = int(line.get("total_duration", 0))
+                    map_data["real_name"] = line.get("real_name", "")
+                    data.append(map_data)
+            else:
+                data = responses
+
     if api_path == "/servers/region/{region}" or api_path == "/servers/region/{region}/active":
         logger.info("Processing " + api_path)
         region = event["pathParameters"]["region"]
@@ -677,6 +750,7 @@ def handler(event, context):
 
     # if api_path == "/groups/add":
     # this functionality is in delivery_writer.py
+    
 
     if api_path == "/groups/{proxy+}":
         # data = event
@@ -1393,6 +1467,27 @@ if __name__ == "__main__":
               }
             }
         '''
-
-    event = json.loads(event_str_seasons)
+    
+    event_str_mapstats = '''
+    {
+      "resource": "/mapstats/region/{region}/type/{type}/player/{player_guid}",
+      "pathParameters": {
+        "region": "na",
+        "type": "6",
+        "player_guid": "22b0e88467093a63d5dd979eec2631d1"
+      }
+    }
+    '''
+    
+    event_str_mapstats_all = '''
+    {
+      "resource": "/mapstats/region/{region}/type/{type}/all",
+      "pathParameters": {
+        "region": "na",
+        "type": "6"
+      }
+    }
+    '''
+    
+    event = json.loads(event_str_mapstats_all)
     print(handler(event, None)['body'])

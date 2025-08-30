@@ -151,6 +151,20 @@ class DeliveryStack(Stack):
         events = api.root.add_resource("events").add_resource("{limit}")
         events.add_method("GET", retriever_integration)
 
+        # 85
+        mapstats = api.root.add_resource("mapstats")
+        mapstats_region = mapstats.add_resource("region")
+        mapstats_region_name = mapstats_region.add_resource("{region}")
+        mapstats_region_type = mapstats_region_name.add_resource("type")
+        mapstats_region_type_name = mapstats_region_type.add_resource("{type}")
+        
+        mapstats_region_type_player = mapstats_region_type_name.add_resource("player").add_resource("{player_guid}")
+        mapstats_region_type_player.add_method("GET", retriever_integration)
+        
+        # 86
+        mapstats_region_type_all = mapstats_region_type_name.add_resource("all")
+        mapstats_region_type_all.add_method("GET", retriever_integration)
+
         # 90
         server_query = api.root.add_resource("serverquery")
         server_query.add_method("POST", server_query_integration)
