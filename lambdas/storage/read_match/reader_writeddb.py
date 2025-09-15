@@ -91,6 +91,57 @@ def ddb_update_user_records(guids, table):
         values = {':val1': ts}
         ddb_update_item(key, expression, values, table)
 
+def ddb_update_map_records(gamestats, tmp_stats_unnested, real_names, win_loss_dict, table):
+    """Update map statistics for each player."""
+    match_type = gamestats.get("match_type", "unk#unk")
+    map_name = gamestats.get("gameinfo", {}).get("map", "unknown")
+    
+    # Calculate match duration from round_start and round_end
+    time_limit = gamestats.get("gameinfo", {}).get("time_limit", "0:0")
+    round_start = int(gamestats.get("gameinfo", {}).get("round_start", 0))
+    round_end = int(gamestats.get("gameinfo", {}).get("round_end", 0))
+    duration_r1 = int(time_limit.split(":")[0])*60 + int(time_limit.split(":")[1])
+    duration_r2 = round_end - round_start if round_end > round_start else 0
+    duration = duration_r1 + duration_r2
+    
+    for player_item in tmp_stats_unnested:
+        for player_guid, stat in player_item.items():
+            real_name = real_names.get(player_guid, stat.get("alias", "unknown"))
+            win_loss = win_loss_dict.get(player_guid, "Draw")
+            
+            key = {
+                'pk': f"maps#{player_guid}",
+                'sk': f"{match_type}#{map_name}"
+            }
+            
+            # Determine win/loss/draw increments
+            wins_inc = 1 if win_loss == "Win" else 0
+            losses_inc = 1 if win_loss == "Loss" else 0
+            draws_inc = 1 if win_loss == "Draw" else 0
+            
+            expression = ('SET games = if_not_exists(games, :zero) + :one, '
+                         'wins = if_not_exists(wins, :zero) + :wins_val, '
+                         'losses = if_not_exists(losses, :zero) + :losses_val, '
+                         'draws = if_not_exists(draws, :zero) + :draws_val, '
+                         'total_duration = if_not_exists(total_duration, :zero) + :duration_val, '
+                         'real_name = :real_name, '
+                         'gsi1pk = :gsi1pk, '
+                         'gsi1sk = :gsi1sk')
+            
+            values = {
+                ':zero': 0,
+                ':one': 1,
+                ':wins_val': wins_inc,
+                ':losses_val': losses_inc,
+                ':draws_val': draws_inc,
+                ':duration_val': duration,
+                ':real_name': real_name,
+                ':gsi1pk': "maps",
+                ':gsi1sk': f"{match_type}#all"
+            }
+            
+            ddb_update_item(key, expression, values, table)
+
 def ddb_prepare_server_item(gamestats):
 
     ts = datetime.now().isoformat()
@@ -145,24 +196,12 @@ def ddb_prepare_match_item(gamestats):
         }
     return match_item
 
-def ddb_prepare_stats_items(gamestats):
-
-    #debug
-    #playerguid = list(gamestats["stats"][0].keys())[0]
-    #stat = gamestats["stats"][0][playerguid]
-
-    #this is some stupid fix ddb requires
-    #nevermind... saving everything as strings
-    # https://github.com/boto/boto3/issues/665
-    #from decimal import Decimal
-    #stat["categories"]["accuracy"] = Decimal(str(stat["categories"]["accuracy"]))
-    #stat["categories"]["efficiency"] = Decimal(str(stat["categories"]["efficiency"]))
+def ddb_prepare_stats_items(gamestats, tmp_stats_unnested, win_loss_dict):
 
     stats_items = []
     duplicates_check = {}
     matchid = gamestats["gameinfo"]["match_id"]
 
-    tmp_stats_unnested = fix_stats_nesting(gamestats)
     for player_item in tmp_stats_unnested:
         for playerguid, stat in player_item.items():
             inject_json_version(stat, gamestats)
@@ -172,11 +211,13 @@ def ddb_prepare_stats_items(gamestats):
                 'gsi1pk': "stats#" + gamestats["match_type"] + "#" + playerguid,
                 'gsi1sk': matchid,
                 'data'  : json.dumps(stat),
-                'gsi2pk': "playermap",
-                'gsi2sk': gamestats["gameinfo"].get("map", "unk") + "#" + playerguid + "#" + matchid,
+                # 'gsi2pk': "playermap",
+                # 'gsi2sk': gamestats["gameinfo"].get("map", "unk") + "#" + playerguid + "#" + matchid,
+                'win_loss_ind': win_loss_dict.get(playerguid, 'Draw'),
                 'ExpirationTime': int(matchid) + 60 * 60 * 24 * 730  # expire after 2 years
              }
-            print(stats_item)
+
+            logger.debug(stats_item)
             if playerguid in duplicates_check:
                 logger.warning("Skipping duplicate player in stats " + playerguid)
             else:
@@ -349,6 +390,7 @@ def create_batch_write_structure(table_name, items, start_num, batch_size):
         item_batch[table_name].append({'PutRequest': {'Item': item_serialized}})
 
     return item_batch
+    
 
 def ddb_batch_write(client, table_name, items):
         message = ""
@@ -403,24 +445,13 @@ def ddb_batch_write(client, table_name, items):
 
 def inject_json_version(obj, gamestats):
     if isinstance(obj, list):
-        logger.info("Skipping list while inserting the versions")  # TODO
+        logger.debug("Skipping list while inserting the versions")
     elif isinstance(obj, dict):
         obj['jsonGameStatVersion'] = gamestats["serverinfo"]["jsonGameStatVersion"]
     else:
         logger.warning("Unidentified stats object!")
 
-def fix_stats_nesting(gamestats):
-    stats_new_object = []
-    if len(gamestats["stats"]) == 2:
-            logger.info("Number of items in stats: 2")
-            for k,v in gamestats["stats"][0].items():
-                stats_new_object.append({k:v})
-            for k,v in gamestats["stats"][1].items():
-                stats_new_object.append({k:v})
-            logger.info("New statsall has " + str(len(stats_new_object)) + " players")
-    else:
-        stats_new_object = gamestats["stats"]
-    return stats_new_object
+
 
 '''
 CLI Tests

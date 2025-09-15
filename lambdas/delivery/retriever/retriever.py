@@ -662,7 +662,7 @@ def handler(event, context):
             pk_name = "pk"
             index_name = None
             skname = "sk"
-            projections = "pk, sk, games, wins, draw, losses, total_duration, real_name"
+            projections = "pk, sk, games, wins, draws, losses, total_duration, real_name"
             limit = 100
             ascending = False
             
@@ -678,7 +678,7 @@ def handler(event, context):
                     map_data["map"] = sk_parts[2]
                     map_data["games"] = int(line.get("games", 0))
                     map_data["wins"] = int(line.get("wins", 0))
-                    map_data["draw"] = int(line.get("draw", 0))
+                    map_data["draws"] = int(line.get("draws", 0))
                     map_data["losses"] = int(line.get("losses", 0))
                     map_data["total_duration"] = int(line.get("total_duration", 0))
                     map_data["real_name"] = line.get("real_name", "")
@@ -693,34 +693,29 @@ def handler(event, context):
             type_ = event["pathParameters"]["type"]
             logger.info("Parameters: " + region + " " + type_)
             
-            pk = "maps"
-            begins_with = region + "#" + type_
-            pk_name = "gsi1pk"
-            index_name = "gsi1"
-            skname = "gsi1sk"
-            projections = "pk, sk, gsi1sk, games, wins, draw, losses, total_duration, real_name"
-            limit = 1000
-            ascending = False
+            region_type = region + "#" + type_
             
-            responses = get_begins(pk_name, pk, begins_with, ddb_table, index_name, skname, projections, log_stream_name, limit, ascending)
+            responses = get_maps_all(region_type, ddb_table, log_stream_name)
             
             if "error" not in responses:
                 data = []
                 for line in responses:
                     map_data = {}
                     pk_parts = line["pk"].split("#")
-                    sk_parts = line["gsi1sk"].split("#") 
+                    sk_parts = line["sk"].split("#") 
                     map_data["guid"] = pk_parts[1]
                     map_data["map"] = sk_parts[2] if len(sk_parts) > 2 else ""
                     map_data["games"] = int(line.get("games", 0))
                     map_data["wins"] = int(line.get("wins", 0))
-                    map_data["draw"] = int(line.get("draw", 0))
-                    map_data["losses"] = int(line.get("losses", 0))
-                    map_data["total_duration"] = int(line.get("total_duration", 0))
                     map_data["real_name"] = line.get("real_name", "")
                     data.append(map_data)
             else:
                 data = responses
+            # print(len(data))
+            # data_size_bytes = len(json.dumps(data, default=default_type_error_handler).encode('utf-8'))
+            # data_size_kb = data_size_bytes / 1024
+            # print(f"Data size: {data_size_kb:.2f} KB")
+            
 
     if api_path == "/servers/region/{region}" or api_path == "/servers/region/{region}/active":
         logger.info("Processing " + api_path)
@@ -949,6 +944,53 @@ def get_begins(pk_name, pk, begins_with, ddb_table, index_name, skname, projecti
                 response = ddb_table.query(
                     KeyConditionExpression=Key(pk_name).eq(pk) & Key(skname).begins_with(begins_with),
                     ProjectionExpression=projections, Limit=limit, ScanIndexForward=ascending)
+    except ClientError as e:
+        logger.warning("Exception occurred: " + e.response['Error']['Message'])
+        result = make_error_dict("[x] Client error calling database: ", item_info)
+    else:
+        if response['Count'] > 0:
+            result = response['Items']
+        else:
+            result = make_error_dict("[x] Items do not exist: ", item_info)
+    return result
+
+
+def get_maps_all(region_type, ddb_table, log_stream_name):
+    """Get maps/all."""
+    item_info = f"maps/{region_type}#all. Logstream: " + log_stream_name
+    
+    pk = "maps"
+    pk_name = "gsi1pk"
+    index_name = "gsi1"
+    skname = "gsi1sk"
+    projections = "pk, sk, games, wins, real_name"
+    min_games = 8
+
+    try:
+        response = {"Items": [], "Count": 0}
+        last_evaluated_key = None
+        
+        while True:
+            query_params = {
+                "IndexName": index_name,
+                "KeyConditionExpression": Key(pk_name).eq(pk) & Key(skname).eq(region_type + "#all"),
+                "ProjectionExpression": projections,
+                "FilterExpression": Attr('games').gte(min_games)
+            }
+            
+            if last_evaluated_key:
+                query_params["ExclusiveStartKey"] = last_evaluated_key
+            
+            page_response = ddb_table.query(**query_params)
+            
+            response["Items"].extend(page_response.get("Items", []))
+            response["Count"] += page_response.get("Count", 0)
+            
+            last_evaluated_key = page_response.get("LastEvaluatedKey")
+            if not last_evaluated_key:
+                break
+            else:
+                logger.info("LastEvaluatedKey found, continuing to query.")
     except ClientError as e:
         logger.warning("Exception occurred: " + e.response['Error']['Message'])
         result = make_error_dict("[x] Client error calling database: ", item_info)

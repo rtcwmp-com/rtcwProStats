@@ -168,15 +168,3 @@ class DeliveryStack(Stack):
         # 90
         server_query = api.root.add_resource("serverquery")
         server_query.add_method("POST", server_query_integration)
-
-        
-        
-        
-        
-
-        
-
-
-
-        
-        
