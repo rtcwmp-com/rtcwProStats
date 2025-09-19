@@ -13,6 +13,9 @@ cdk.out
 .venv/
 venv/
 
+# VS code project
+.vscode/
+
 #pycharm project
 .idea/
 
