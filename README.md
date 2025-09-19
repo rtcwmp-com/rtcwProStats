@@ -80,6 +80,8 @@ x is done , / is work in progress, blank is planned
 |[x] | Events     | /events/{limit}                                                                            | Get last x pipeline events                                           |
 |[x] | Server API | /serverquery                                                                               | API for servers talking to rtcwproapi                                |
 |[x] | Seasons    | /seasons/region/{region}/type/{type}                                                       | Get list of seasons                                                  |
+|[x] | Mapstats    | /mapstats/region/{region}/type/{type}/all                                                 | Get map stats for all players in a region/type                                                  |
+|[x] | Mapstats    | /mapstats/region/{region}/type/{type}/player/{player_guid}                                | Get list of map win/losses per player and region/type                                                  |
 
 Example:
 
@@ -156,6 +158,10 @@ https://rtcwproapi.donkanator.com/events/5
 ### Seasons
 
 https://rtcwproapi.donkanator.com/seasons/region/sa/type/6
+
+### Mapstats
+https://rtcwproapi.donkanator.com/mapstats/region/na/type/6/player/8f386762d073946033665229b4a484a5
+https://rtcwproapi.donkanator.com/mapstats/region/na/type/6/all
 
 
 ## Usage 
@@ -300,3 +306,5 @@ If you are an API consumer, please do your part:
 * add: /player/{player_guid}/season/{season_id}
 * add: /seasons/region/{region}/type/{type}
 * add: season maker major release
+* add: /mapstats/region/{region}/type/{type}/player/{player_guid}
+* add: /mapstats/region/{region}/type/{type}/all

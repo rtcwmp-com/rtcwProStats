@@ -5,17 +5,16 @@ import time as _time
 import os
 import datetime
 from botocore.exceptions import ClientError
-from read_match_matchinfo import build_teams, convert_stats_to_dict
+from boto3.dynamodb.conditions import Key
+from read_match_matchinfo import build_teams, convert_stats_to_dict, build_new_match_summary
 
 from reader_writeddb import (
-    # ddb_put_item,
     ddb_prepare_match_item,
     ddb_prepare_stats_items,
     ddb_prepare_statsall_item,
     ddb_prepare_gamelog_item,
     ddb_prepare_wstat_items,
     ddb_prepare_wstatsall_item,
-    # ddb_prepare_alias_items,
     ddb_prepare_log_item,
     ddb_batch_write,
     ddb_update_server_record,
@@ -23,13 +22,16 @@ from reader_writeddb import (
     ddb_get_server,
     ddb_prepare_alias_items_v2,
     ddb_prepare_real_name_update,
-    ddb_update_user_records
+    ddb_update_user_records,
+    ddb_update_map_records
 )
 
-# pip install --target ./ sqlalchemy
-# import sqlalchemy
-
-dry_run = False
+dry_run_server_update = False
+dry_run_batch_load = False
+dry_run_user_records = False
+dry_run_map_records = False
+dry_run_step_functions = False
+dry_run_event_bridge = False
 
 log_level = logging.INFO
 logging.basicConfig(format='%(name)s:%(levelname)s:%(message)s')
@@ -66,11 +68,6 @@ event_template = {
 
 def handler(event, context):
     """Read new incoming json and submit it to the DB."""
-    # s3 event source
-    # bucket_name = event['Records'][0]['s3']['bucket']['name']
-    # file_key = event['Records'][0]['s3']['object']['key']
-
-    # sqs event source
     s3_request_from_sqs = json.loads(event['Records'][0]["body"])
     bucket_name = s3_request_from_sqs["Records"][0]['s3']['bucket']['name']
     file_key    = s3_request_from_sqs["Records"][0]['s3']['object']['key']
@@ -89,14 +86,14 @@ def handler(event, context):
         elif err.response['Error']['Code'] == 'NoSuchKey':
             logger.error("File was not found: " + file_key)
         else:
-            print("[x] Unexpected error: %s" % err)
+            logger.error("[x] Unexpected error: " + str(err))
         return None
 
     message = "Nothing was processed"
     try:
         content = obj['Body'].read().decode('UTF-8')
         gamestats = json.loads(content)
-        logger.info("Number of keys in the file: " + str(len(gamestats.keys())))
+        logger.debug("Number of keys in the file: " + str(len(gamestats.keys())))
     except Exception as ex:
         template = "An exception of type {0} occurred. Arguments:\n{1!r}"
         error_msg = template.format(type(ex).__name__, ex.args)
@@ -124,7 +121,10 @@ def handler(event, context):
     if server:
         logger.info("Updating the server with +1 match")
         region = server["region"]
-        ddb_update_server_record(gamestats, table, region, date_time_human)
+        if dry_run_server_update:
+            logger.info("Skipped update_server_record due to dry run")
+        else:
+            ddb_update_server_record(gamestats, table, region, date_time_human)
     else:
         server_item = ddb_prepare_server_item(gamestats)
 
@@ -150,7 +150,37 @@ def handler(event, context):
     logger.info("Setting the match_type to " + match_type)
     gamestats["match_type"] = match_type
     gamestats["gameinfo"]["server_name"] = gamestats['serverinfo']['serverName']
-    gamestats["gameinfo"]["teams"] = add_team_info(gamestats)
+    teamA, teamB, aliases, team_mapping, alias_team_str = add_team_info(gamestats)
+    gamestats["gameinfo"]["teams"] = alias_team_str
+
+    match_id = gamestats["gameinfo"]["match_id"] 
+    round_id = gamestats["gameinfo"]["round"]
+    round2 = True if round_id == "2" else False
+    
+    if round2:
+        match_dict = {match_id + "2": gamestats["gameinfo"]}
+        
+        #fake round 1 to fit another function evaluation logic
+        try:
+            time_limit_sec = int(gamestats["gameinfo"]["time_limit"].split(":")[0])*60 + int(gamestats["gameinfo"]["time_limit"].split(":")[1])
+        except Exception as ex:
+            logger.warning("time_limit_sec conversion failed")
+            time_limit_sec = 600
+
+        match_dict[match_id + "1"] = {
+            "winner": "", 
+            "round_start":match_id, 
+            "round_end":str(int(match_id) + time_limit_sec), 
+            "round":"1",
+            "map": gamestats["gameinfo"]["map"]}
+        #end fake
+        match_summary = build_new_match_summary(match_dict, team_mapping)       
+        gamestats["gameinfo"]["match_summary"] = match_summary
+        # gamestats["gameinfo"]["TeamA"] = teamA
+        # gamestats["gameinfo"]["TeamB"] = teamB
+    else:
+        match_summary = {"results": {}}
+        teamA, teamB = None, None
 
     submitter_ip = gamestats.get("submitter_ip", "no.ip.in.file")
 
@@ -166,15 +196,19 @@ def handler(event, context):
 
     items = []
     match_item = ddb_prepare_match_item(gamestats)
-    match_id = str(match_item["sk"])
-    stats_items = ddb_prepare_stats_items(gamestats)
+    tmp_stats_unnested = fix_stats_nesting(gamestats)
+
+    win_loss_dict = make_win_loss_dict(match_id, tmp_stats_unnested, match_summary, teamA, teamB)
+    stats_items = ddb_prepare_stats_items(gamestats, tmp_stats_unnested, win_loss_dict)
+
     statsall_item = ddb_prepare_statsall_item(gamestats)
+    
     gamelog_item = ddb_prepare_gamelog_item(gamestats)
     wstats_items = ddb_prepare_wstat_items(gamestats)
     wstatsall_item = ddb_prepare_wstatsall_item(gamestats)
     aliasv2_items = ddb_prepare_alias_items_v2(gamestats, real_names)
     new_player_items, old_player_items = ddb_prepare_real_name_update(gamestats, real_names)
-    log_item = ddb_prepare_log_item(match_id, file_key,
+    log_item = ddb_prepare_log_item(match_id + round_id, file_key,
                                     len(match_item["data"]),
                                     len(stats_items),
                                     len(statsall_item["data"]),
@@ -199,9 +233,11 @@ def handler(event, context):
 
     total_items = str(len(items))
     message = ""
-
-    if not dry_run:
-        t1 = _time.time()
+    
+    t1 = _time.time()
+    if dry_run_batch_load:
+        logger.info("Skipped ddb_batch_write due to dry run")
+    else:
         try:
             ddb_batch_write(ddb_client, table.name, items)
             message = f"Sent {file_key} to database with {total_items} items. pk = match, sk = {match_id}"
@@ -212,23 +248,42 @@ def handler(event, context):
             logger.error(message)
             return message
 
+    if dry_run_user_records:
+        logger.info("Skipped user_records due to dry run")
+    else:
         try:
             ddb_update_user_records(old_player_items, table)
-            logger.info(f"Updated player dates for {match_id}")
+            logger.info(f"Updated player dates for {match_id}")  
         except Exception as ex:
             template = "An exception of type {0} occurred. Arguments:\n{1!r}"
             error_msg = template.format(type(ex).__name__, ex.args)
             message = "Failed to update all player dates for a match " + match_id + "\n" + error_msg
             logger.warning(message)
 
+    if dry_run_map_records:
+        logger.info("Skipped map_records due to dry run")
+    else:
+        if round2: 
+            try:
+                ddb_update_map_records(gamestats, tmp_stats_unnested, real_names, win_loss_dict, table)
+                logger.info(f"Added mapstats for {match_id}")
+            except Exception as ex:
+                template = "An exception of type {0} occurred. Arguments:\n{1!r}"
+                error_msg = template.format(type(ex).__name__, ex.args)
+                message = "Failed to update map records for a match " + match_id + "\n" + error_msg
+                logger.warning(message)
+
+    if dry_run_step_functions:
+        logger.info("Skipped step functions due to dry run")
+    else:
         try:
             response = sf_client.start_execution(stateMachineArn=MATCH_STATE_MACHINE,
-                                                 input='{"matchid": "' + gamestats["gameinfo"]["match_id"] + '","roundid": ' + gamestats["gameinfo"]["round"] + '}'
+                                                 input='{"matchid": "' + match_id + '","roundid": ' + gamestats["gameinfo"]["round"] + '}'
                                                  )
         except Exception as ex:
             template = "An exception of type {0} occurred. Arguments:\n{1!r}"
             error_msg = template.format(type(ex).__name__, ex.args)
-            message = "Failed to start state machine for " + gamestats["gameinfo"]["match_id"] + "\n" + error_msg
+            message = "Failed to start state machine for " + match_id + "\n" + error_msg
             logger.error(message)
             return message
         else:
@@ -239,7 +294,10 @@ def handler(event, context):
                 message += "\nState machine failed."
                 logger.error(message)
                 return message
-
+    
+    if dry_run_event_bridge:
+        logger.info("Skipped event bridge due to dry run")
+    else:
         try:
             events = []
             new_player_events = announce_new_players(gamestats, real_names, match_type)
@@ -252,7 +310,7 @@ def handler(event, context):
         except Exception as ex:
             template = "An exception of type {0} occurred. Arguments:\n{1!r}"
             error_msg = template.format(type(ex).__name__, ex.args)
-            message = "Failed to announce new players via event bridge in " + gamestats["gameinfo"]["match_id"] + "\n" + error_msg
+            message = "Failed to announce new players via event bridge in " + match_id + "\n" + error_msg
             logger.error(message)
         else:
             if response and response['ResponseMetadata']['HTTPStatusCode'] == 200:
@@ -265,8 +323,7 @@ def handler(event, context):
         logger.info(message)
         time_to_write = str(round((_time.time() - t1), 3))
         logger.info(f"Time to write {total_items} items is {time_to_write} s")
-    else:
-        logger.info("Skipped submission due to dry run")
+        
     return message
 
 
@@ -306,19 +363,6 @@ def prepare_playerinfo_list(stats, sk):
     for guid, player_stats in stats.items():
         item_list.append({"pk": "player#" + guid, "sk": sk})
     return item_list
-
-# def convert_stats_to_dict(stats):
-#     if len(stats) == 2 and len(stats[0]) > 1: #stats grouped in teams in a list of 2 teams , each team over 1 player
-#         logger.info("Number of stats entries 2, trying to merge teams")
-#         stats_tmp = stats[0].copy()
-#         stats_tmp.update(stats[1])
-#     else:
-#         logger.info("Merging list into dict.")
-#         stats_tmp = {}
-#         for player in stats:
-#             stats_tmp.update(player)
-#     logger.info("New statsall has " + str(len(stats_tmp)) + " players in a " + str(type(stats_tmp)))
-#     return stats_tmp
 
 
 def get_batch_items(item_list, ddb_table, dynamodb, log_stream_name):
@@ -373,25 +417,106 @@ def add_team_info(gamestats):
 
     try:
         new_total_stats = {}
-        new_total_stats["dummy"] = convert_stats_to_dict(gamestats["stats"])
+        match_id = gamestats['gameinfo']['match_id']
+        new_total_stats[match_id] = convert_stats_to_dict(gamestats["stats"])
         teamA, teamB, aliases, team_mapping, alias_team_str = build_teams(new_total_stats)
-        teams = alias_team_str
     except Exception as ex:
         template = "An exception of type {0} occurred. Arguments:\n{1!r}"
         error_msg = template.format(type(ex).__name__, ex.args)
         message = "Failed to make teams" + error_msg
         logger.warning(message)
 
-    return teams
+    return teamA, teamB, aliases, team_mapping, alias_team_str
+
+
+def fix_stats_nesting(gamestats):
+    stats_new_object = []
+    if len(gamestats["stats"]) == 2:
+            logger.info("Number of items in stats: 2")
+            for k,v in gamestats["stats"][0].items():
+                stats_new_object.append({k:v})
+            for k,v in gamestats["stats"][1].items():
+                stats_new_object.append({k:v})
+            logger.info("New statsall has " + str(len(stats_new_object)) + " players")
+    else:
+        stats_new_object = gamestats["stats"]
+    return stats_new_object
+
+
+def make_win_loss_dict(match_id, tmp_stats_unnested, match_summary, teamA, teamB):
+    win_loss_dict = {}
+    player_win_loss_ind = "Draw"
+
+    for player_item in tmp_stats_unnested:
+        for playerguid, stat in player_item.items():
+            if "round2" in match_summary["results"].get(match_id, {}):
+                        winnerAB = match_summary["results"].get(match_id).get("winnerAB")
+                        if winnerAB == "Draw":
+                            player_win_loss_ind = "Draw"
+                        elif winnerAB == "TeamA":
+                            if playerguid in teamA:
+                                player_win_loss_ind = "Win"
+                            else:
+                                player_win_loss_ind = "Loss"
+                        elif winnerAB == "TeamB":
+                            if playerguid in teamB:
+                                player_win_loss_ind = "Win"
+                            else:
+                                player_win_loss_ind = "Loss"
+            else:
+                player_win_loss_ind = "R1MSB"
+            win_loss_dict.setdefault(playerguid, player_win_loss_ind)
+    return win_loss_dict
+            
+
+def test_get_log_records(num_of_files, more_recent_sk):
+    """Test function to retrieve DynamoDB records with pk='match' and sk beginning with specified prefix."""
+    try:
+        # Create range for between operation - from prefix to next lexicographic value
+        start_key = 'log#00000000000#intake/20250516-005744-1747356459.txt'
+        # Increment the last character to create upper bound
+        end_key = more_recent_sk
+        
+        # Query DynamoDB for records with pk="match" and sk between the range
+        response = table.query(
+            KeyConditionExpression=Key('pk').eq('match') & Key('sk').between(start_key, end_key),
+            ProjectionExpression='sk',
+            Limit=num_of_files,
+            ScanIndexForward=False  # Get most recent records first
+        )
+        
+        # Extract sk values into test_files array
+        test_files = []
+        for item in response.get('Items', []):
+            test_files.append(item["sk"].split("#")[2])
+        
+        logger.info(f"Retrieved {len(test_files)} records")        
+        return test_files
+        
+    except ClientError as e:
+        logger.error(f"Error querying DynamoDB: {e.response['Error']['Message']}")
+        return []
+    except Exception as e:
+        logger.error(f"Unexpected error: {str(e)}")
+        return []
 
 
 if __name__ == "__main__":
-    # not working since sqs was introduced. Finniky json double quotes
-    event = {"Records":
+    # Test the log records retrieval function
+    test_files = test_get_log_records(14, "log#9999999999#intake/20240620-034750-1718854749.txt")
+    
+    # Original test code
+    test_files = ["intake/20250913-062548-1757743496.txt"]
+    
+    print("first " + test_files[0])
+    print("last " + test_files[-1])
+    for test_file_name in test_files:
+        event = {"Records":
              [
                  {
-                     "body": "{\"Records\":[{\"s3\":{\"bucket\":{\"name\":\"rtcwprostats\"},\"object\":{\"key\":\"intake/20220620-030959-1655694370.txt\"}}}]}"
+                     "body": "{\"Records\":[{\"s3\":{\"bucket\":{\"name\":\"rtcwprostats\"},\"object\":{\"key\":\"@filename\"}}}]}"
                  }
              ]
-             }
-    print("Test result" + handler(event, None))
+        }
+        event["Records"][0]["body"] = event["Records"][0]["body"].replace("@filename", test_file_name)
+        handler(event, None)
