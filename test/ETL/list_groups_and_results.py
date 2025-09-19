@@ -33,12 +33,28 @@ def get_groups(ddb_table, region, type_, num_rows):
                                Limit=num_rows,
                                ScanIndexForward=False)
 
+    group_match_keys = {}
+    dedup_response = []
+    for record in response["Items"]:
+        matches_arr = json.loads(record['data'])
+        tmp_group_matches = []
+        for match in matches_arr:
+            tmp_group_matches.append(str(match))
+        group_key = ".".join(sorted(tmp_group_matches))
+        if group_key in group_match_keys:
+            print("Skip duplicate group")
+            continue
+        else:
+            group_match_keys[group_key] = 1
+            dedup_response.append(record)
+
     group_items = []
     group_item_dups = []
-    for record in response["Items"]:
-        if record["sk"].split("#")[0] not in group_item_dups:
-            group_items.append({"pk": "groupcache#stats", "sk": record["sk"].split("#")[0]})
-            group_item_dups.append(record["sk"].split("#")[0])
+    for record in dedup_response:
+        group_key = record["sk"]
+        if group_key.split("#")[0] not in group_item_dups:
+            group_items.append({"pk": "groupcache#stats", "sk": group_key.split("#")[0]})
+            group_item_dups.append(group_key.split("#")[0])
 
     num_items = len(group_items)
     start = 0
@@ -57,6 +73,7 @@ def get_groups(ddb_table, region, type_, num_rows):
         big_response.extend(response2["Responses"][ddb_table.name])
 
     rows = []
+    guids = {}
     skipped = 0
     try:
         for group_cache in big_response:
@@ -90,6 +107,7 @@ def get_groups(ddb_table, region, type_, num_rows):
 
                 if guid in js["elos"]:
                     player_elo = js["elos"][guid][1]
+                    guids[guid] = [js["elos"][guid][0], js["elos"][guid][1]]
                 else:
                     print("Skipping. No elo found for guid " + guid)
                     keep_row = False
@@ -161,6 +179,19 @@ def get_groups(ddb_table, region, type_, num_rows):
     print(f"Skipped {skipped} out of {total_per_region} groups for this region")
     return rows
 
+
+def guids_to_csv(guids):
+    fields = ["guid", "real_name", "current_elo"]
+    guid_rows = []
+    for guid, vals in guids.items():
+        guid_rows.append([guid, vals[0], vals[1]])
+    with open("rt_guids.csv", 'w') as csvfile:
+        # creating a csv writer object
+        csvwriter = csv.writer(csvfile, lineterminator='\n')
+        csvwriter.writerow(fields)
+        csvwriter.writerows(guid_rows)
+
+
 def matches_to_csv(matches, type="training"):
     fields = ["mean_a", "median_a", "max_a", "min_a", "panz_a", "mean_b", "median_b", "max_b", "min_b", "panz_b"]
     if type == "training":
@@ -191,12 +222,10 @@ def convert_stats_to_dict(stats):
 if __name__ == "__main__":
     regions = ["na", "eu", "sa", "unk"]
     types = ["6", "3", "6plus", "unk"]
-    matches_na = get_groups(ddb_table, regions[0], types[0], num_rows=400)
-    matches_eu = get_groups(ddb_table, regions[1], types[0], num_rows=400)
-    matches = matches_na + matches_eu
+    matches_na = get_groups(ddb_table, regions[0], types[0], num_rows=1000)
+    # matches_eu = get_groups(ddb_table, regions[1], types[0], num_rows=400)
+    matches = matches_na # + matches_eu
     print("Final number of matches: " + str(len(matches)))
-    matches_to_csv(matches[0:250], type="training")
-    matches_to_csv(matches[250:], type="testing")
-
-
-
+    training_rows_cutoff = int(len(matches)*0.8)
+    matches_to_csv(matches[0:training_rows_cutoff], type="training")
+    matches_to_csv(matches[training_rows_cutoff:], type="testing")
