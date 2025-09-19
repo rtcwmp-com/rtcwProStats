@@ -698,17 +698,29 @@ def handler(event, context):
             responses = get_maps_all(region_type, ddb_table, log_stream_name)
             
             if "error" not in responses:
-                data = []
+                guid_data = {}
                 for line in responses:
-                    map_data = {}
+                    guid_map_data = {}
                     pk_parts = line["pk"].split("#")
-                    sk_parts = line["sk"].split("#") 
-                    map_data["guid"] = pk_parts[1]
-                    map_data["map"] = sk_parts[2] if len(sk_parts) > 2 else ""
-                    map_data["games"] = int(line.get("games", 0))
-                    map_data["wins"] = int(line.get("wins", 0))
-                    map_data["real_name"] = line.get("real_name", "")
-                    data.append(map_data)
+                    sk_parts = line["sk"].split("#")
+
+                    guid = pk_parts[1]
+                    map_name = sk_parts[2] if len(sk_parts) > 2 else ""
+                    guid_map_data["map"] = map_name # x
+                    guid_map_data["games"] = int(line.get("games", 0))  # part y
+                    guid_map_data["wins"] = int(line.get("wins", 0))  # part y
+
+                    if guid in guid_data:
+                        guid_data[guid]["data"].append(guid_map_data)
+                    else:
+                        guid_data[guid] = {}
+                        guid_data[guid]["real_name"] = line.get("real_name", "")
+                        guid_data[guid]["data"] = [guid_map_data]
+
+                # change dict to array
+                data = []
+                for guid in guid_data:
+                    data.append({"id": guid, "real_name": guid_data[guid]["real_name"], "data": guid_data[guid]["data"]})
             else:
                 data = responses
             # print(len(data))
