@@ -123,6 +123,7 @@ DeliveryStack(app, "rtcwprostats-delivery",
               retriever=retriever.retriever_lambda,
               server_query=retriever.server_query_lambda,
               delivery_writer=delivery_writer.delivery_writer_lambda,
+              discord_auth=delivery_writer.discord_auth_lambda,
               env=env)
 
 ObservabilityStack(app, "rtcwprostats-observe",
@@ -156,6 +157,7 @@ strip_permissions(apistack.node)
 print("Adding lambda resource policies for API lambdas")
 retriever.retriever_lambda.grant_invoke(iam.ServicePrincipal("apigateway.amazonaws.com"))
 retriever.server_query_lambda.grant_invoke(iam.ServicePrincipal("apigateway.amazonaws.com"))
+delivery_writer.discord_auth_lambda.grant_invoke(iam.ServicePrincipal("apigateway.amazonaws.com"))
 apistack.save_payload.grant_invoke(iam.ServicePrincipal("apigateway.amazonaws.com"))
 delivery_writer.delivery_writer_lambda.grant_invoke(iam.ServicePrincipal("apigateway.amazonaws.com"))
 

@@ -29,7 +29,7 @@ class APIStack(Stack):
             self, 'save_payload',
             function_name='rtcwpro-save-payload',
             handler='save_payload.handler',
-            runtime=_lambda.Runtime.PYTHON_3_8,
+            runtime=_lambda.Runtime.PYTHON_3_13,
             code=_lambda.Code.from_asset('lambdas/pipeline/save_payload'),
             role=save_payload_role,
             tracing=lambda_tracing,
@@ -47,7 +47,7 @@ class APIStack(Stack):
 
         cert = acm.Certificate.from_certificate_arn(self, "Certificate", cert_arn)
 
-        log_group = logs.LogGroup(self, "rtcwproLogGroup", log_group_name="RCTWProApiLogs", retention=logs.RetentionDays.THREE_MONTHS)
+        log_group = logs.LogGroup(self, "rtcwproLogGroup", log_group_name="RCTWProApiLogs2", retention=logs.RetentionDays.THREE_MONTHS)
         api = apigw.RestApi(self, "rtcwpro",
                             domain_name={
                                 "domain_name": "rtcwproapi.donkanator.com",

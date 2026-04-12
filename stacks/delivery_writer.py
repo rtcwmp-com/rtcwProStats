@@ -30,7 +30,7 @@ class DeliveryWriterStack(Stack):
             self, 'delivery-writer',
             function_name='rtcwpro-delivery-writer',
             handler='delivery_writer.handler',
-            runtime=_lambda.Runtime.PYTHON_3_8,
+            runtime=_lambda.Runtime.PYTHON_3_13,
             code=_lambda.Code.from_asset('lambdas/delivery/delivery_writer'),
             role=delivery_writer_role,
             tracing=lambda_tracing,
@@ -41,8 +41,24 @@ class DeliveryWriterStack(Stack):
                 'RTCWPROSTATS_CUSTOM_BUS_ARN': custom_event_bus.event_bus_arn
             }
         )
+
         custom_event_bus.grant_put_events_to(delivery_writer)
 
         ddb_table.grant_write_data(delivery_writer_role)
         funnel_sf.grant_start_execution(delivery_writer)
+
+        discord_auth = _lambda.Function(
+            self, 'discord_auth',
+            function_name='rtcwpro-discord-auth',
+            handler='discord_auth.handler',
+            runtime=_lambda.Runtime.PYTHON_3_13,
+            code=_lambda.Code.from_asset('lambdas/delivery/discord_auth'),
+            role=delivery_writer_role,
+            tracing=lambda_tracing,
+            environment={
+                'RTCWPROSTATS_TABLE_NAME': ddb_table.table_name,
+            }
+        )
+
         self.delivery_writer_lambda = delivery_writer
+        self.discord_auth_lambda = discord_auth

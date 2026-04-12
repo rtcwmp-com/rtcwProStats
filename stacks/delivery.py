@@ -8,12 +8,14 @@ import aws_cdk.aws_apigateway as apigw
 class DeliveryStack(Stack):
     """Public API for retrieving match and player data."""
 
-    def __init__(self, scope: Construct, id: str, api: apigw.RestApi, retriever: _lambda.IFunction, server_query: _lambda.IFunction, delivery_writer: _lambda.IFunction, **kwargs) -> None:
+    def __init__(self, scope: Construct, id: str, api: apigw.RestApi, retriever: _lambda.IFunction, server_query: _lambda.IFunction, delivery_writer: _lambda.IFunction, discord_auth: _lambda.IFunction, **kwargs) -> None:
         super().__init__(scope, id, **kwargs)
 
         retriever_integration = apigw.LambdaIntegration(retriever)
         server_query_integration = apigw.LambdaIntegration(server_query)
         delivery_writer_integration = apigw.LambdaIntegration(delivery_writer)
+        discordauth_integration = apigw.LambdaIntegration(discord_auth)
+
 
         # 1
         matches = api.root.add_resource("matches")
@@ -168,3 +170,24 @@ class DeliveryStack(Stack):
         # 90
         server_query = api.root.add_resource("serverquery")
         server_query.add_method("POST", server_query_integration)
+
+        # 95
+        discord_auth = api.root.add_resource("discordauth")
+        discord_auth_token = discord_auth.add_resource("token")
+        discord_auth_token.add_method("POST", discordauth_integration)
+
+        discord_auth_verify = discord_auth.add_resource("verify")
+        discord_auth_verify.add_method("GET", discordauth_integration)
+
+        discord_auth_logout = discord_auth.add_resource("logout")
+        discord_auth_logout.add_method("POST", discordauth_integration)
+
+        # 96
+        admin = api.root.add_resource("admin")
+        admin_tasks = admin.add_resource("tasks")
+        admin_tasks.add_method("GET", discordauth_integration)
+
+        admin_tasks_id = admin_tasks.add_resource("{task_id}")
+        admin_tasks_id_status = admin_tasks_id.add_resource("status")
+        admin_tasks_id_status.add_method("PUT", discordauth_integration)
+
