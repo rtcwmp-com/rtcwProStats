@@ -30,7 +30,6 @@ class DeliveryStack(Stack):
         stats_match_id.add_method("GET", retriever_integration)
         # 4
         stats_player = statsall.add_resource("player")
-        # stats_player.add_method("GET", retriever_integration)
 
         stats_player_guid = stats_player.add_resource("{player_guid}")
         stats_player_guid.add_method("GET", retriever_integration)
@@ -42,10 +41,10 @@ class DeliveryStack(Stack):
         stats_group.add_method("GET", retriever_integration)
 
         # 5
-        # stats_type = statsall.add_resource("type")
+        stats_type = statsall.add_resource("type")
 
-        # stats_type_type = stats_type.add_resource("{type}")
-        # stats_type_type.add_method("GET", retriever_integration)
+        stats_type_type = stats_type.add_resource("{type}")
+        stats_type_type.add_method("GET", retriever_integration)
 
         # 6
         wstatsall = api.root.add_resource("wstats")
@@ -95,13 +94,10 @@ class DeliveryStack(Stack):
         servers_region_name_active = servers_region_name.add_resource("active")
         servers_region_name_active.add_method("GET", retriever_integration)
         
-        #32
-        # servers_detail = servers.add_resource("detail")
-        # servers_detail.add_method("GET", retriever_integration)
         
         #40
         groups = api.root.add_resource("groups")
-        groups.add_method("GET", retriever_integration)
+        # groups.add_method("GET", retriever_integration)
         
         #41
         groups_proxy = groups.add_proxy(default_integration=retriever_integration, any_method=False)
@@ -190,4 +186,10 @@ class DeliveryStack(Stack):
         admin_tasks_id = admin_tasks.add_resource("{task_id}")
         admin_tasks_id_status = admin_tasks_id.add_resource("status")
         admin_tasks_id_status.add_method("PUT", discordauth_integration)
+        
 
+       #100
+        prediction = api.root.add_resource("prediction")
+        prediction_add = prediction.add_resource("add")
+        prediction_add.add_method("POST", delivery_writer_integration, api_key_required=True)
+        

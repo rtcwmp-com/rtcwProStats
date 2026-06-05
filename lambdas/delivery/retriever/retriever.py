@@ -758,7 +758,6 @@ def handler(event, context):
     # if api_path == "/groups/add":
     # this functionality is in delivery_writer.py
     
-
     if api_path == "/groups/{proxy+}":
         # data = event
         path = event.get("pathParameters", {}).get("proxy", "")
@@ -805,10 +804,57 @@ def handler(event, context):
             responses = get_begins(pk_name, pk, begins_with, ddb_table, index_name, skname, projections,
                                    log_stream_name, 100, ascending)
             data = process_group_responses(responses)
+        
+        if (len(path_tokens) == 8 and path_tokens[0] == "region" and
+                path_tokens[1] in ["sa", "na", "eu"] and
+                path_tokens[2] == "type" and 
+                path_tokens[3] in ["3", "6"]):
+            logger.info("Parameter: /groups/region/{region_name}/type/{match_type}/startdate/{sdate}/limit/{limit}")
+            
+            #retrieve group info
+            pk = "group"
+            more_than_type_region_date = path_tokens[1] + "#" + path_tokens[3] + "#" + path_tokens[5]
+            limit = int(path_tokens[7])
+            sklow = more_than_type_region_date
+            ascending = True
+            responses = get_more_than(pk, sklow, ddb_table, log_stream_name, limit, ascending)
+            group_shell = process_predictions_responses(responses)
+            
+            #retireve group details
+            pk = "groupcache#stats"
+            sk = group_shell["group_name"]
+            response = get_item(pk, sk, ddb_table, log_stream_name)
+            if "error" in response:
+                data = []
+            else:
+                del group_shell["group_name"]
+                maps = []
+                group_cache = json.loads(response["data"])
+                match_summary = group_cache["match_summary"]
+                for match_id, match_result in match_summary["results"].items():
+                    if match_result["map"] not in maps:
+                        maps.append(match_result["map"])
+                group_shell["maps"] = maps
+
+                players = {"TeamA": {}, "TeamB": {}}
+
+                for player_stats in group_cache["statsall"]:
+                    realname = group_cache["elos"][list(player_stats.keys())[0]][0]
+                    elo = group_cache["elos"][list(player_stats.keys())[0]][1]
+                    team = list(player_stats.values())[0]["team"]
+                    players[team][realname] = elo
+                
+                for team, player_elos in players.items():
+                    sorted_players = [name for name, rank in sorted(player_elos.items(), key=lambda x: x[1], reverse=True)]
+                    players[team] = sorted_players
+
+                group_shell["players"] = players
+                data = group_shell
+
 
         if len(data) == 0:
             data = make_error_dict("Could not match path:", path)
-
+ 
     return {
         'statusCode': 200,
         'headers': {
@@ -911,6 +957,23 @@ def get_range(index_name, pk, sklow, skhigh, table, log_stream_name, limit, asce
         else:
             response = table.query(KeyConditionExpression=Key('pk').eq(pk) & Key('sk').between(sklow, skhigh),
                                    Limit=limit, ReturnConsumedCapacity='NONE', ScanIndexForward=ascending)
+    except ClientError as e:
+        logger.warning("Exception occurred: " + e.response['Error']['Message'])
+        result = make_error_dict("[x] Client error calling database: ", item_info)
+    else:
+        if response['Count'] > 0:
+            result = response['Items']
+        else:
+            result = make_error_dict("[x] Items do not exist: ", item_info)
+    return result
+
+def get_more_than(pk, sklow, table, log_stream_name, limit, ascending):
+    """Get several items by pk and range of sk."""
+    item_info = pk + ":" + sklow + ". Logstream: " + log_stream_name
+    try:
+        response = table.query(IndexName="gsi1",
+            KeyConditionExpression=Key('gsi1pk').eq(pk) & Key("gsi1sk").gt(sklow),
+            Limit=limit, ReturnConsumedCapacity='NONE', ScanIndexForward=ascending)
     except ClientError as e:
         logger.warning("Exception occurred: " + e.response['Error']['Message'])
         result = make_error_dict("[x] Client error calling database: ", item_info)
@@ -1126,6 +1189,24 @@ def process_group_responses(responses):
             group["duration_nice"] = response.get("duration_nice", "00:00")
             data[group_name] = group
     return data
+
+
+def process_predictions_responses(responses):
+    if "error" in responses:
+        data = responses
+    else:
+        data = {}
+        import random
+        responses_shuffled = list(responses)
+        random.shuffle(responses_shuffled)
+        for response in responses_shuffled:
+            games = int(response.get("games"))
+            if response.get("cached") == "Yes" and games > 2 and games < 5:
+                group_name = response["sk"].split("#")[0]
+                group = {}
+                group["group_name"] = group_name
+                group["gsi1sk"] = response["gsi1sk"]
+    return group
 
 
 def process_match_health_responses(responses_current, responses_month_ago, responses_last_year, sk_prefix):
@@ -1542,6 +1623,15 @@ if __name__ == "__main__":
       }
     }
     '''
+
+    event_str_group_predictions= '''
+    {
+      "resource": "/groups/{proxy+}",
+      "pathParameters": {
+        "proxy": "region/na/type/6/startdate/2023-09-29/limit/4"
+      }
+    }
+    '''
     
-    event = json.loads(event_str_mapstats_all)
+    event = json.loads(event_str_group_predictions)
     print(handler(event, None)['body'])

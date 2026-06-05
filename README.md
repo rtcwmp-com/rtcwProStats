@@ -82,6 +82,8 @@ x is done , / is work in progress, blank is planned
 |[x] | Seasons    | /seasons/region/{region}/type/{type}                                                       | Get list of seasons                                                  |
 |[x] | Mapstats    | /mapstats/region/{region}/type/{type}/all                                                 | Get map stats for all players in a region/type                                                  |
 |[x] | Mapstats    | /mapstats/region/{region}/type/{type}/player/{player_guid}                                | Get list of map win/losses per player and region/type                                                  |
+|[x] | groups    | groups/region/{region}/type/{type}/startdate/{start_date}/limit/{limit}                                | get list of groups more than start_date
+|[x] | predictions    | /prediction/add                                | post predictions for a match              
 
 Example:
 
@@ -308,3 +310,5 @@ If you are an API consumer, please do your part:
 * add: season maker major release
 * add: /mapstats/region/{region}/type/{type}/player/{player_guid}
 * add: /mapstats/region/{region}/type/{type}/all
+* add: groups/region/{region}/type/{type}/startdate/{start_date}/limit/{limit}
+* add: /prediction/add
